@@ -172,6 +172,18 @@ bool parse_primary(LexResult *lex_result, unsigned int *position, double *value)
     return true;
   }
 
+  if (t.type == TOKEN_MINUS) {
+    (*position)++;
+
+    double inner = 0;
+    if (!parse_primary(lex_result, position, &inner)) {
+      return false;
+    }
+
+    *value = -inner;
+    return true;
+  }
+
   return false;
 }
 
@@ -266,6 +278,8 @@ void loop(void) {
   static size_t input_pointer = 0;
   static char output[MAX_OUTPUT_SIZE];
   static char has_output = false;
+  static unsigned long last_cursor_blink = millis();
+  static bool show_cursor = true;
 
   input[MAX_INPUT_SIZE] = '\0';
 
@@ -277,6 +291,16 @@ void loop(void) {
   videoOut.setTextWrap(true);
   videoOut.setTextColor(0xFF);
   videoOut.print(input);
+  if (!has_output) {
+    if (show_cursor) {
+      videoOut.print('_');
+    }
+
+    if (millis() - last_cursor_blink >= 500) {
+      last_cursor_blink = millis();
+      show_cursor = !show_cursor;
+    }
+  }
 
   if (has_output) {
     videoOut.print("\n= ");
@@ -323,6 +347,10 @@ void loop(void) {
     case '<': {
       if (has_output || input_pointer <= 0) return;
 
+      // Do not blink while typing
+      show_cursor = true;
+      last_cursor_blink = millis();
+
       input_pointer--;
       input[input_pointer] = '\0';
 
@@ -338,6 +366,10 @@ void loop(void) {
       }
 
       if (input_pointer >= MAX_INPUT_SIZE) return;
+
+      // Do not blink while typing
+      show_cursor = true;
+      last_cursor_blink = millis();
 
       input[input_pointer++] = read_key;
       input[input_pointer] = '\0';
