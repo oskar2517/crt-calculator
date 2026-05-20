@@ -1,12 +1,37 @@
 #include <Keypad.h>
 #include <ESP_8_BIT_GFX.h>
 
-#define MAX_INPUT_LENGTH 128
+#define MAX_INPUT_LENGTH 512
+
+#define MAX_TOKENS 250
 
 #define KEYPAD_ROWS 5
 #define KEYPAD_COLS 4
 
-char keypadKeys[KEYPAD_ROWS][KEYPAD_COLS] = {
+typedef enum {
+  TOKEN_NUMBER,
+  TOKEN_PLUS,
+  TOKEN_MINUS,
+  TOKEN_ASTERISK,
+  TOKEN_SLASH,
+  TOKEN_LEFT_PAREN,
+  TOKEN_RIGHT_PAREN
+} TokenType;
+
+typedef struct {
+  TokenType type;
+
+  union {
+    double number;
+  };
+} Token;
+
+typedef struct {
+  unsigned int token_count;
+  Token *tokens;
+} LexResult;
+
+char keypad_keys[KEYPAD_ROWS][KEYPAD_COLS] = {
   {'(',')','<','C'},
   {'7','8','9','/'},
   {'4','5','6','*'},
@@ -14,159 +39,12 @@ char keypadKeys[KEYPAD_ROWS][KEYPAD_COLS] = {
   {'0','.','=','+'}
 };
 
-byte keypadRowPins[KEYPAD_ROWS] = {13, 14, 15, 16, 17};
-byte keypadColPins[KEYPAD_COLS] = {18, 19, 21, 22};
+byte keypad_row_pins[KEYPAD_ROWS] = {13, 14, 15, 16, 17};
+byte keypad_col_pins[KEYPAD_COLS] = {18, 19, 21, 22};
 
-Keypad customKeypad = Keypad(makeKeymap(keypadKeys), keypadRowPins, keypadColPins, KEYPAD_ROWS, KEYPAD_COLS);
+Keypad customKeypad = Keypad(makeKeymap(keypad_keys), keypad_row_pins, keypad_col_pins, KEYPAD_ROWS, KEYPAD_COLS);
 
 ESP_8_BIT_GFX videoOut(false, 8 /* = RGB332 color */);
-
-struct ExpressionParser {
-  const char *input;
-  byte length;
-  byte position;
-  bool error;
-};
-
-bool isOperator(char key) {
-  return key == '+' || key == '-' || key == '*' || key == '/';
-}
-
-int operatorPrecedence(char key) {
-  if (key == '+' || key == '-') {
-    return 1;
-  }
-  if (key == '*' || key == '/') {
-    return 2;
-  }
-  return 0;
-}
-
-double parseNumber(ExpressionParser &parser) {
-  double value = 0.0;
-  double decimalPlace = 0.1;
-  bool hasDigit = false;
-  bool hasDecimalPoint = false;
-
-  while (parser.position < parser.length) {
-    char current = parser.input[parser.position];
-
-    if (current >= '0' && current <= '9') {
-      hasDigit = true;
-      if (hasDecimalPoint) {
-        value += (current - '0') * decimalPlace;
-        decimalPlace *= 0.1;
-      } else {
-        value = value * 10.0 + (current - '0');
-      }
-      parser.position++;
-    } else if (current == '.' && !hasDecimalPoint) {
-      hasDecimalPoint = true;
-      parser.position++;
-    } else {
-      break;
-    }
-  }
-
-  if (!hasDigit) {
-    parser.error = true;
-  }
-
-  return value;
-}
-
-double parsePrimary(ExpressionParser &parser) {
-  if (parser.position >= parser.length) {
-    parser.error = true;
-    return 0.0;
-  }
-
-  char current = parser.input[parser.position];
-
-  if (current == '-') {
-    parser.position++;
-    return -parsePrimary(parser);
-  }
-
-  if (current == '(') {
-    parser.position++;
-    double value = parseExpression(parser, 1);
-
-    if (parser.position >= parser.length || parser.input[parser.position] != ')') {
-      parser.error = true;
-      return value;
-    }
-
-    parser.position++;
-    return value;
-  }
-
-  if ((current >= '0' && current <= '9') || current == '.') {
-    return parseNumber(parser);
-  }
-
-  parser.error = true;
-  return 0.0;
-}
-
-double applyOperator(double left, char operatorKey, double right, ExpressionParser &parser) {
-  if (operatorKey == '+') {
-    return left + right;
-  }
-  if (operatorKey == '-') {
-    return left - right;
-  }
-  if (operatorKey == '*') {
-    return left * right;
-  }
-  if (operatorKey == '/') {
-    if (right == 0.0) {
-      parser.error = true;
-      return 0.0;
-    }
-    return left / right;
-  }
-
-  parser.error = true;
-  return 0.0;
-}
-
-double parseExpression(ExpressionParser &parser, int minimumPrecedence) {
-  double left = parsePrimary(parser);
-
-  while (!parser.error && parser.position < parser.length) {
-    char operatorKey = parser.input[parser.position];
-    int precedence = operatorPrecedence(operatorKey);
-
-    if (precedence < minimumPrecedence) {
-      break;
-    }
-
-    parser.position++;
-    double right = parseExpression(parser, precedence + 1);
-    left = applyOperator(left, operatorKey, right, parser);
-  }
-
-  return left;
-}
-
-bool evaluateExpression(const char input[], byte inputPointer, double &result) {
-  if (inputPointer == 0) {
-    return false;
-  }
-
-  ExpressionParser parser = { input, inputPointer, 0, false };
-  result = parseExpression(parser, 1);
-
-  return !parser.error && parser.position == parser.length;
-}
-
-bool isInput(char key) {
-  return (key >= '0' && key <= '9') 
-    || key == '(' || key == ')'
-    || key == '+' || key == '-' || key == '*' || key == '/'
-    || key == '.';
-}
 
 void setup() {
   Serial.begin(9600);
@@ -176,13 +54,89 @@ void setup() {
   pinMode(26, OUTPUT);
   digitalWrite(26, HIGH);
 }
+
+double lex_number(const char **input) {
+  double value = 0.0;
+  double divisor = 10.0;
+
+  while (**input >= '0' && **input <= '9') {
+    value = (value * 10) + (**input - '0');
+    (*input)++;
+  }
+
+  if (**input == '.') {
+    (*input)++;
+
+    while (**input >= '0' && **input <= '9') {
+      value += (**input - '0') / divisor;
+      divisor *= 10.0;
+      (*input)++;
+    }
+  }
+
+  return value;
+}
+
+LexResult *lex(const char *input) {
+  LexResult *result = (LexResult*) malloc(sizeof(*result));
+  if (!result) return NULL;
+
+  Token *tokens = (Token*) malloc(MAX_TOKENS * sizeof(*tokens));
+  if (!tokens) {
+    free(result);
+
+    return NULL;
+  }
+
+  result->tokens = tokens;
+
+  unsigned int token_pointer = 0;
+  const char *str = input;
+
+  while (*str) {
+    if (token_pointer >= MAX_TOKENS) {
+      free(tokens);
+      free(result);
+
+      return NULL;
+    }
+
+    Token *t = &tokens[token_pointer];
+
+    if (*str >= '0' && *str <= '9') {
+      t->type = TOKEN_NUMBER;
+      t->number = lex_number(&str);
+
+      token_pointer++;
+      continue;
+    }
+
+    switch (*str) {
+      case '+': t->type = TOKEN_PLUS; break;
+      case '-': t->type = TOKEN_MINUS; break;
+      case '*': t->type = TOKEN_ASTERISK; break;
+      case '/': t->type = TOKEN_SLASH; break;
+      case '(': t->type = TOKEN_LEFT_PAREN; break;
+      case ')': t->type = TOKEN_RIGHT_PAREN; break;
+      default:
+        free(tokens);
+        free(result);
+
+        return NULL;
+    }
+
+    token_pointer++;
+    str++;
+  }
+
+  result->token_count = token_pointer;
+
+  return result;
+}
   
 void loop(void) {
   static char input[MAX_INPUT_LENGTH + 1];
-  static byte inputPointer = 0;
-  static bool hasResult = false;
-  static double result;
-  static char resultOutput[50];
+  static size_t input_pointer = 0;
 
   input[MAX_INPUT_LENGTH] = '\0';
 
@@ -195,39 +149,32 @@ void loop(void) {
   videoOut.setTextColor(0xFF);
   videoOut.print(input);
  
-  char readKey = customKeypad.getKey();
-  
-  if (isInput(readKey) && inputPointer < MAX_INPUT_LENGTH - 1) {
-    if (hasResult) {
-      inputPointer = 0;
-      result = 0;
-      hasResult = false;
+  char read_key = customKeypad.getKey();
+
+  if (!read_key) return;
+
+  switch (read_key) {
+    case 'C': {
+      input_pointer = 0;
       memset(input, 0, sizeof(input));
+      break;
     }
 
-    input[inputPointer] = readKey;
-    inputPointer++;
-  } else if (readKey == 'C') {
-    inputPointer = 0;
-    result = 0;
-    memset(input, 0, sizeof(input));
-    hasResult = false;
-  } else if (readKey == '<' && inputPointer > 0) {
-    inputPointer--;
-  } else if (readKey == '=') {
-    hasResult = true;
+    case '=': {
+      LexResult *lex_result = lex(input);
 
-    if (evaluateExpression(input, inputPointer, result)) {
-      Serial.println(result);
-    } else {
-      Serial.println("Error");
+      if (lex_result == NULL) return;
+      
+      free(lex_result->tokens);
+      free(lex_result);
+      break;
     }
-  }
 
-  if (hasResult) {
-    memset(resultOutput, 0, sizeof(resultOutput));
-    snprintf(resultOutput, 50, "%f", result);
-    videoOut.print("\n= ");
-    videoOut.print(resultOutput);
+    default: {
+      if (input_pointer >= MAX_INPUT_LENGTH) return;
+
+      input[input_pointer++] = read_key;
+      input[input_pointer] = '\0';
+    }
   }
 }
