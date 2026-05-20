@@ -1,7 +1,8 @@
 #include <Keypad.h>
 #include <ESP_8_BIT_GFX.h>
 
-#define MAX_INPUT_LENGTH 512
+#define MAX_OUTPUT_SIZE 512
+#define MAX_INPUT_SIZE (21 * 3)
 
 #define MAX_TOKENS 250
 
@@ -31,6 +32,10 @@ typedef struct {
   Token *tokens;
 } LexResult;
 
+typedef struct {
+  double value;
+} ParseEvalResult;
+
 char keypad_keys[KEYPAD_ROWS][KEYPAD_COLS] = {
   {'(',')','<','C'},
   {'7','8','9','/'},
@@ -45,15 +50,6 @@ byte keypad_col_pins[KEYPAD_COLS] = {18, 19, 21, 22};
 Keypad customKeypad = Keypad(makeKeymap(keypad_keys), keypad_row_pins, keypad_col_pins, KEYPAD_ROWS, KEYPAD_COLS);
 
 ESP_8_BIT_GFX videoOut(false, 8 /* = RGB332 color */);
-
-void setup() {
-  Serial.begin(9600);
-  videoOut.begin();
-
-  // Enable 12V boost converter
-  pinMode(26, OUTPUT);
-  digitalWrite(26, HIGH);
-}
 
 double lex_number(const char **input) {
   double value = 0.0;
@@ -133,12 +129,145 @@ LexResult *lex(const char *input) {
 
   return result;
 }
+
+int8_t precedence(Token *token) {
+  switch (token->type) {
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:
+      return 1;
+
+    case TOKEN_ASTERISK:
+    case TOKEN_SLASH:
+      return 2;
+  }
+
+  return -1;
+}
+
+bool parse_primary(LexResult *lex_result, unsigned int *position, double *value) {
+  Token t = lex_result->tokens[*position];
+  
+  if (t.type == TOKEN_NUMBER) {
+    (*position)++;
+    *value = t.number;
+
+    return true;
+  }
+  
+  if (t.type == TOKEN_LEFT_PAREN) {
+    (*position)++;
+    ParseEvalResult *v = parse_eval_1(lex_result, position);
+    if (v == NULL) {
+      return false;
+    }
+
+    if (lex_result->tokens[*position].type != TOKEN_RIGHT_PAREN) {
+      return false;
+    }
+    (*position)++;
+
+    *value = v->value;
+    free(v);
+
+    return true;
+  }
+
+  return false;
+}
+
+double apply_operator(TokenType op, double left, double right) {
+  switch (op) {
+    case TOKEN_PLUS: return left + right;
+    case TOKEN_MINUS: return left - right;
+    case TOKEN_ASTERISK: return left * right;
+    case TOKEN_SLASH: return left / right; // TODO: handle division by zero
+  }
+
+  // Unreachable
+}
+
+ParseEvalResult *parse_eval_2(LexResult *lex_result, unsigned int *position, double left, byte min_precedence) {
+  while (*position < lex_result->token_count) {
+    Token lookahead = lex_result->tokens[*position];
+
+    if (precedence(&lookahead) < min_precedence) {
+      break;
+    }
+
+    Token op = lookahead;
+    (*position)++;
+
+    double right = 0;
+    if (!parse_primary(lex_result, position, &right)) {
+      return NULL;
+    }
+
+    while (*position < lex_result->token_count) {
+      lookahead = lex_result->tokens[*position];
+
+      if (precedence(&lookahead) <= precedence(&op)) {
+        break;
+      }
+
+      ParseEvalResult *right_result =
+        parse_eval_2(lex_result, position, right, precedence(&op) + 1);
+
+      if (right_result == NULL) {
+        return NULL;
+      }
+
+      right = right_result->value;
+      free(right_result);
+    }
+
+    left = apply_operator(op.type, left, right);
+  }
+
+  ParseEvalResult *r = (ParseEvalResult*) malloc(sizeof(*r));
+  if (!r) return NULL;
+
+  r->value = left;
+  return r;
+}
+
+ParseEvalResult *parse_eval_1(LexResult *lex_result, unsigned int *position) {
+  double left = 0;
+  
+  if (!parse_primary(lex_result, position, &left)) {
+    return NULL;
+  }
+
+  return parse_eval_2(lex_result, position, left, 0);
+}
+
+ParseEvalResult *parse_eval(LexResult *lex_result) {
+  unsigned int position = 0;
+
+  ParseEvalResult *result = parse_eval_1(lex_result, &position);
+
+  if (position != lex_result->token_count) {
+    return NULL;
+  }
+
+  return result;
+}
+
+void setup(void) {
+  Serial.begin(9600);
+  videoOut.begin();
+
+  // Enable 12V boost converter
+  pinMode(26, OUTPUT);
+  digitalWrite(26, HIGH);
+}
   
 void loop(void) {
-  static char input[MAX_INPUT_LENGTH + 1];
+  static char input[MAX_INPUT_SIZE + 1];
   static size_t input_pointer = 0;
+  static char output[MAX_OUTPUT_SIZE];
+  static char has_output = false;
 
-  input[MAX_INPUT_LENGTH] = '\0';
+  input[MAX_INPUT_SIZE] = '\0';
 
   videoOut.waitForFrame();
 
@@ -148,6 +277,11 @@ void loop(void) {
   videoOut.setTextWrap(true);
   videoOut.setTextColor(0xFF);
   videoOut.print(input);
+
+  if (has_output) {
+    videoOut.print("\n= ");
+    videoOut.print(output);
+  }
  
   char read_key = customKeypad.getKey();
 
@@ -156,6 +290,7 @@ void loop(void) {
   switch (read_key) {
     case 'C': {
       input_pointer = 0;
+      has_output = false;
       memset(input, 0, sizeof(input));
       break;
     }
@@ -164,14 +299,29 @@ void loop(void) {
       LexResult *lex_result = lex(input);
 
       if (lex_result == NULL) return;
-      
+
+      ParseEvalResult *parse_eval_result = parse_eval(lex_result);
+
       free(lex_result->tokens);
       free(lex_result);
+
+      if (parse_eval_result == NULL) {
+        snprintf(output, MAX_OUTPUT_SIZE, "ERROR");
+        has_output = true;
+        return;
+      }
+
+      memset(output, 0, sizeof(output));
+      snprintf(output, MAX_OUTPUT_SIZE, "%f", parse_eval_result->value);
+      has_output = true;
+
+      free(parse_eval_result);
+
       break;
     }
 
     default: {
-      if (input_pointer >= MAX_INPUT_LENGTH) return;
+      if (input_pointer >= MAX_INPUT_SIZE) return;
 
       input[input_pointer++] = read_key;
       input[input_pointer] = '\0';
