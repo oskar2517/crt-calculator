@@ -1,7 +1,7 @@
 #include <Keypad.h>
 #include <ESP_8_BIT_GFX.h>
 
-#define MAX_OUTPUT_SIZE 512
+#define MAX_OUTPUT_SIZE (21 * 2)
 #define MAX_INPUT_SIZE (21 * 3)
 
 #define MAX_TOKENS 250
@@ -320,7 +320,23 @@ void loop(void) {
       break;
     }
 
+    case '<': {
+      if (has_output || input_pointer <= 0) return;
+
+      input_pointer--;
+      input[input_pointer] = '\0';
+
+      break;
+    }
+
     default: {
+      if (has_output) {
+        has_output = false;
+        memset(input, 0, sizeof(input));
+        memcpy(input, output, sizeof(input));
+        input_pointer = strlen(output);
+      }
+
       if (input_pointer >= MAX_INPUT_SIZE) return;
 
       input[input_pointer++] = read_key;
