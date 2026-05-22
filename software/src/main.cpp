@@ -1,186 +1,79 @@
-#include <Keypad.h>
-#include <ESP_8_BIT_GFX.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <Arduino.h>
+#include <stdint.h>
 
-#include "lexer.h"
-#include "parser.h"
+#include "calculator.h"
 #include "keypad.h"
+#include "snake.h"
 #include "video.h"
 
-#define MAX_OUTPUT_SIZE (21 * 2)
-#define MAX_INPUT_SIZE (21 * 3)
+#define MODE_SWITCH_WINDOW_MS UINT32_C(350)
 
 typedef struct {
-  char input[MAX_INPUT_SIZE + 1];
-  size_t input_pointer;
-  char output[MAX_OUTPUT_SIZE];
-  bool has_output;
-  bool has_error;
-  unsigned long last_cursor_blink;
-  bool show_cursor;
-} AppState;
+    void (*enter)();
+    void (*render)();
+    void (*handle_key)(char read_key);
+} AppMode;
 
-static AppState app_state = {{0}, 0, {0}, false, false, 0, true};
+static uint8_t current_mode_index = 0;
+static uint32_t last_clear_press = 0;
 
-void reset_input(AppState* state) {
-  state->input_pointer = 0;
-  state->has_output = false;
-  state->has_error = false;
-  memset(state->input, 0, sizeof(state->input));
+static AppMode app_modes[] = {
+    {calculator_enter, calculator_render, calculator_handle_key},
+    {snake_enter, snake_render, snake_handle_key},
+};
+
+static uint8_t app_mode_count() {
+    return sizeof(app_modes) / sizeof(app_modes[0]);
 }
 
-void reset_cursor_blink(AppState* state) {
-  state->show_cursor = true;
-  state->last_cursor_blink = millis();
+static AppMode* current_mode() { return &app_modes[current_mode_index]; }
+
+static void switch_mode(uint8_t mode_index) {
+    current_mode_index = mode_index % app_mode_count();
+    current_mode()->enter();
 }
 
-void print_error(AppState* state, const char* message) {
-  snprintf(state->output, sizeof(state->output), "%s", message);
-  state->has_output = true;
-  state->has_error = true;
-}
+static void switch_to_next_mode() { switch_mode(current_mode_index + 1); }
 
-void render_display(AppState* state) {
-  state->input[MAX_INPUT_SIZE] = '\0';
-
-  video_out.waitForFrame();
-
-  video_out.fillScreen(0);
-  video_out.setCursor(0, 20);
-  video_out.setTextSize(2);
-  video_out.setTextWrap(true);
-  video_out.setTextColor(0xFF);
-  video_out.print(state->input);
-
-  if (!state->has_output) {
-    if (state->show_cursor) {
-      video_out.print('_');
+static bool handle_mode_shortcut(char read_key) {
+    if (read_key != 'C') {
+        last_clear_press = 0;
+        return false;
     }
 
-    if (millis() - state->last_cursor_blink >= 500) {
-      state->last_cursor_blink = millis();
-      state->show_cursor = !state->show_cursor;
+    uint32_t now = millis();
+
+    if (last_clear_press != 0 &&
+        now - last_clear_press <= MODE_SWITCH_WINDOW_MS) {
+        last_clear_press = 0;
+        switch_to_next_mode();
+        return true;
     }
-  }
 
-  if (state->has_output) {
-    video_out.print("\n= ");
-    video_out.print(state->output);
-  }
-}
-
-bool evaluate_input(AppState* state) {
-  if (state->input_pointer == 0) {
+    last_clear_press = now;
     return false;
-  }
-
-  LexResult* lex_result = lex(state->input);
-
-  if (lex_result == NULL) {
-    print_error(state, "LEX ERROR");
-    return false;
-  }
-
-  ParseEvalResult* parse_eval_result = parse_eval(lex_result);
-
-  free(lex_result->tokens);
-  free(lex_result);
-
-  if (parse_eval_result == NULL) {
-    print_error(state, "PARSE ERROR");
-    return false;
-  }
-
-  if (!isnormal(parse_eval_result->value)) {
-    print_error(state, "MATH ERROR");
-    free(parse_eval_result);
-    return false;
-  }
-
-  memset(state->output, 0, sizeof(state->output));
-  snprintf(state->output, sizeof(state->output), "%f", parse_eval_result->value);
-  state->has_output = true;
-
-  free(parse_eval_result);
-  return true;
-}
-
-void delete_last_input_character(AppState* state) {
-  if (state->has_output || state->input_pointer == 0) {
-    return;
-  }
-
-  reset_cursor_blink(state);
-
-  state->input_pointer--;
-  state->input[state->input_pointer] = '\0';
-}
-
-void continue_from_output(AppState* state) {
-  state->has_output = false;
-  memset(state->input, 0, sizeof(state->input));
-  snprintf(state->input, sizeof(state->input), "%s", state->output);
-  state->input_pointer = strlen(state->input);
-}
-
-void append_input_character(AppState* state, char input_character) {
-  if (state->has_error) {
-    return;
-  }
-
-  if (state->has_output) {
-    continue_from_output(state);
-  }
-
-  if (state->input_pointer >= MAX_INPUT_SIZE) {
-    return;
-  }
-
-  reset_cursor_blink(state);
-
-  state->input[state->input_pointer++] = input_character;
-  state->input[state->input_pointer] = '\0';
-}
-
-void handle_key(AppState* state, char read_key) {
-  switch (read_key) {
-    case 'C':
-      reset_input(state);
-      break;
-
-    case '=':
-      evaluate_input(state);
-      break;
-
-    case '<':
-      delete_last_input_character(state);
-      break;
-
-    default:
-      append_input_character(state, read_key);
-      break;
-  }
 }
 
 void setup() {
-  Serial.begin(9600);
-  video_out.begin();
-  app_state.last_cursor_blink = millis();
+    Serial.begin(9600);
+    video_out.begin();
+    current_mode()->enter();
 
-  // Enable 12V boost converter
-  pinMode(26, OUTPUT);
-  digitalWrite(26, HIGH);
+    // Enable 12V boost converter
+    pinMode(26, OUTPUT);
+    digitalWrite(26, HIGH);
 }
-  
+
 void loop() {
-  render_display(&app_state);
- 
-  char read_key = keypad.getKey();
+    AppMode* mode = current_mode();
 
-  if (!read_key) return;
+    mode->render();
 
-  handle_key(&app_state, read_key);
+    char read_key = keypad.getKey();
+
+    if (!read_key) return;
+
+    if (handle_mode_shortcut(read_key)) return;
+
+    mode->handle_key(read_key);
 }

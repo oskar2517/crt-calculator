@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #define MAX_TOKENS 250
 
 typedef enum {
@@ -21,7 +23,7 @@ typedef struct {
 } Token;
 
 typedef struct {
-    unsigned int token_count;
+    uint32_t token_count;
     Token* tokens;
 } LexResult;
 
