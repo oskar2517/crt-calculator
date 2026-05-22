@@ -322,6 +322,8 @@ void loop(void) {
     }
 
     case '=': {
+      if (input_pointer == 0) return;
+
       LexResult *lex_result = lex(input);
 
       if (lex_result == NULL) {
