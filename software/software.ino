@@ -292,6 +292,8 @@ void loop(void) {
   videoOut.setTextWrap(true);
   videoOut.setTextColor(0xFF);
   videoOut.print(input);
+
+  
   if (!has_output) {
     if (show_cursor) {
       videoOut.print('_');
@@ -340,6 +342,13 @@ void loop(void) {
 
       if (parse_eval_result == NULL) {
         snprintf(output, MAX_OUTPUT_SIZE, "PARSE ERROR");
+        has_output = true;
+        has_error = true;
+        return;
+      }
+
+      if (!isnormal(parse_eval_result->value)) {
+        snprintf(output, MAX_OUTPUT_SIZE, "MATH ERROR");
         has_output = true;
         has_error = true;
         return;
