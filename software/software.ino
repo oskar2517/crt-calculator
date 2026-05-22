@@ -324,7 +324,12 @@ void loop(void) {
     case '=': {
       LexResult *lex_result = lex(input);
 
-      if (lex_result == NULL) return;
+      if (lex_result == NULL) {
+        snprintf(output, MAX_OUTPUT_SIZE, "LEX ERROR");
+        has_output = true;
+        has_error = true;
+        return;
+      }
 
       ParseEvalResult *parse_eval_result = parse_eval(lex_result);
 
@@ -332,7 +337,7 @@ void loop(void) {
       free(lex_result);
 
       if (parse_eval_result == NULL) {
-        snprintf(output, MAX_OUTPUT_SIZE, "ERROR");
+        snprintf(output, MAX_OUTPUT_SIZE, "PARSE ERROR");
         has_output = true;
         has_error = true;
         return;
