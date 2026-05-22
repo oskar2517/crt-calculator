@@ -46,18 +46,18 @@ void print_error(AppState* state, const char* message) {
 void render_display(AppState* state) {
   state->input[MAX_INPUT_SIZE] = '\0';
 
-  videoOut.waitForFrame();
+  video_out.waitForFrame();
 
-  videoOut.fillScreen(0);
-  videoOut.setCursor(0, 20);
-  videoOut.setTextSize(2);
-  videoOut.setTextWrap(true);
-  videoOut.setTextColor(0xFF);
-  videoOut.print(state->input);
+  video_out.fillScreen(0);
+  video_out.setCursor(0, 20);
+  video_out.setTextSize(2);
+  video_out.setTextWrap(true);
+  video_out.setTextColor(0xFF);
+  video_out.print(state->input);
 
   if (!state->has_output) {
     if (state->show_cursor) {
-      videoOut.print('_');
+      video_out.print('_');
     }
 
     if (millis() - state->last_cursor_blink >= 500) {
@@ -67,8 +67,8 @@ void render_display(AppState* state) {
   }
 
   if (state->has_output) {
-    videoOut.print("\n= ");
-    videoOut.print(state->output);
+    video_out.print("\n= ");
+    video_out.print(state->output);
   }
 }
 
@@ -167,7 +167,7 @@ void handle_key(AppState* state, char read_key) {
 
 void setup() {
   Serial.begin(9600);
-  videoOut.begin();
+  video_out.begin();
   app_state.last_cursor_blink = millis();
 
   // Enable 12V boost converter
@@ -178,7 +178,7 @@ void setup() {
 void loop() {
   render_display(&app_state);
  
-  char read_key = customKeypad.getKey();
+  char read_key = keypad.getKey();
 
   if (!read_key) return;
 

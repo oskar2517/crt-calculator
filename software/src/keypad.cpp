@@ -13,5 +13,5 @@ char keypad_keys[KEYPAD_ROWS][KEYPAD_COLS] = {{'(', ')', '<', 'C'},
 uint8_t keypad_row_pins[KEYPAD_ROWS] = {13, 14, 15, 16, 17};
 uint8_t keypad_col_pins[KEYPAD_COLS] = {18, 19, 21, 22};
 
-Keypad customKeypad = Keypad(makeKeymap(keypad_keys), keypad_row_pins,
+Keypad keypad = Keypad(makeKeymap(keypad_keys), keypad_row_pins,
                              keypad_col_pins, KEYPAD_ROWS, KEYPAD_COLS);

@@ -2,4 +2,4 @@
 
 #include <Keypad.h>
 
-extern Keypad customKeypad;
+extern Keypad keypad;
