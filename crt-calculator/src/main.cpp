@@ -51,6 +51,8 @@ Keypad customKeypad = Keypad(makeKeymap(keypad_keys), keypad_row_pins, keypad_co
 
 ESP_8_BIT_GFX videoOut(false, 8 /* = RGB332 color */);
 
+ParseEvalResult *parse_eval_1(LexResult *lex_result, unsigned int *position);
+
 double lex_number(const char **input) {
   double value = 0.0;
   double divisor = 10.0;
