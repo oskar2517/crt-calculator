@@ -5,14 +5,18 @@
 #define KEYPAD_ROWS 5
 #define KEYPAD_COLS 4
 
-#define MAX_SNAKE_LENGTH 256 // TODO: use max length that fits field
 #define TICK_SPEED 250
 
 #define GRID_SIZE 10
-#define FIELD_X GRID_SIZE * 2
-#define FIELD_Y GRID_SIZE * 5
-#define FIELD_WIDTH GRID_SIZE * 20
-#define FIELD_HEIGHT GRID_SIZE * 18
+#define FIELD_ROWS 18
+#define FIELD_COLS 20
+
+#define FIELD_X (GRID_SIZE * 2)
+#define FIELD_Y (GRID_SIZE * 5)
+#define FIELD_WIDTH (GRID_SIZE * FIELD_COLS)
+#define FIELD_HEIGHT (GRID_SIZE * FIELD_ROWS)
+
+#define MAX_SNAKE_LENGTH (FIELD_ROWS * FIELD_COLS)
 
 typedef enum {
   UP,
@@ -20,6 +24,11 @@ typedef enum {
   LEFT,
   RIGHT
 } Direction;
+
+typedef enum {
+  GAME_OVER,
+  PLAYING
+} GameState;
 
 char keypad_keys[KEYPAD_ROWS][KEYPAD_COLS] = {
   {'(',')','<','C'},
@@ -40,13 +49,15 @@ std::random_device rd;
 std::mt19937 rng(rd());
 
 Direction dir = RIGHT;
+GameState state = PLAYING;
 uint8_t snake[MAX_SNAKE_LENGTH][2];
 uint16_t fruit[2];
 uint16_t len = 1;
 
 uint16_t ran_between(uint16_t min, uint16_t max) {
-    std::uniform_int_distribution<uint16_t> dist(min, max);
-    return dist(rng);
+  std::uniform_int_distribution<uint16_t> dist(min, max);
+  
+  return dist(rng);
 }
 
 void draw_snake() {
@@ -65,10 +76,15 @@ void draw_field() {
 
 void draw_score() {
   videoOut.setCursor(FIELD_X, GRID_SIZE * 3);
-  videoOut.setTextSize(2);
-  videoOut.setTextColor(0xFF);
   videoOut.print("Score: ");
   videoOut.print(len);
+}
+
+void draw_game_over() {
+  if (state != GAME_OVER) return;
+
+  videoOut.setCursor(FIELD_X + FIELD_WIDTH / 2 - 55, FIELD_Y + 3 * GRID_SIZE);
+  videoOut.print("GAME OVER!");
 }
 
 void update_fruit() {
@@ -80,11 +96,15 @@ void update_fruit() {
 }
 
 void step_game() {
+  if (state == GAME_OVER) return;
+
+  // Update snake tail
   for (uint8_t i = len - 1; i > 0; i--) {
     snake[i][0] = snake[i - 1][0];
     snake[i][1] = snake[i - 1][1];
   }
   
+  // Update snake head
   switch (dir) {
     case UP: snake[0][1] -= GRID_SIZE; break;
     case DOWN: snake[0][1] += GRID_SIZE; break;
@@ -95,6 +115,7 @@ void step_game() {
   uint16_t hx = snake[0][0];
   uint16_t hy = snake[0][1];
   
+  // Check fruit collision
   if (hx == fruit[0] && hy == fruit[1]) {
     len++;
     snake[len - 1][0] = -GRID_SIZE;
@@ -104,13 +125,15 @@ void step_game() {
 
   // Check lose condition: out of field bounds
   if (hx < FIELD_X || hx >= FIELD_X + FIELD_WIDTH || hy < FIELD_Y || hy >= FIELD_Y + FIELD_HEIGHT) {
-    reset_game();
+    state = GAME_OVER;
+    return;
   }
 
   // Check lose condition: self collision
   for (uint16_t i = 1; i < len; i++) {
     if (snake[i][0] == snake[0][0] && snake[i][1] == snake[0][1]) {
-      reset_game();
+      state = GAME_OVER;
+      return;
     }
   }
 }
@@ -118,36 +141,41 @@ void step_game() {
 void handle_input() {
   char read_key = customKeypad.getKey();
 
-  if (read_key) {
-    switch (read_key) {
-      case '8': 
-        if (dir == DOWN) break;
-        dir = UP; 
-        break;
+  if (!read_key) return;
 
-      case '2':
-        if (dir == UP) break;
-        dir = DOWN; 
-        break;
+  if (state == GAME_OVER) {
+    reset_game();
+  }
 
-      case '4': 
-        if (dir == RIGHT) break;
-        dir = LEFT; 
-        break;
+  switch (read_key) {
+    case '8': 
+      if (dir == DOWN) break;
+      dir = UP; 
+      break;
 
-      case '6':
-        if (dir == LEFT) break;
-        dir = RIGHT; 
-        break;
-    }
+    case '2':
+      if (dir == UP) break;
+      dir = DOWN; 
+      break;
+
+    case '4': 
+      if (dir == RIGHT) break;
+      dir = LEFT; 
+      break;
+
+    case '6':
+      if (dir == LEFT) break;
+      dir = RIGHT; 
+      break;
   }
 }
 
 void reset_game() {
   len = 1;
   dir = RIGHT;
+  state = PLAYING;
 
-  // Init snake head
+  // Init snake head to center of field
   snake[0][0] = FIELD_X + (FIELD_WIDTH / 2 - ((FIELD_WIDTH / 2) % GRID_SIZE));
   snake[0][1] = FIELD_Y + (FIELD_HEIGHT / 2 - ((FIELD_HEIGHT / 2) % GRID_SIZE));
 
@@ -155,7 +183,6 @@ void reset_game() {
 }
 
 void setup() {
-  Serial.begin(9600);
   videoOut.begin();
 
   pinMode(26, OUTPUT);
@@ -169,24 +196,13 @@ void loop() {
 
   videoOut.waitForFrame();
   videoOut.fillScreen(0);
+  videoOut.setTextSize(2);
+  videoOut.setTextColor(0xFF);
 
   handle_input();
 
   if (millis() - last_tick >= TICK_SPEED) {
     last_tick = millis();
-
-    /* Serial.print("Head: ");
-    Serial.print(snake[0][0]);
-    Serial.print("/");
-    Serial.print(snake[0][1]);
-
-    Serial.print(" Fruit: ");
-    Serial.print(fruit[0]);
-    Serial.print("/");
-    Serial.print(fruit[1]);
-
-    Serial.print(" Len: ");
-    Serial.println(len); */
 
     step_game();
   }
@@ -195,4 +211,5 @@ void loop() {
   draw_field();
   draw_fruit();
   draw_snake();
+  draw_game_over();
 }
