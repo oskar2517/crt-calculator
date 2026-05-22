@@ -277,7 +277,8 @@ void loop(void) {
   static char input[MAX_INPUT_SIZE + 1];
   static size_t input_pointer = 0;
   static char output[MAX_OUTPUT_SIZE];
-  static char has_output = false;
+  static bool has_output = false;
+  static bool has_error = false; 
   static unsigned long last_cursor_blink = millis();
   static bool show_cursor = true;
 
@@ -315,6 +316,7 @@ void loop(void) {
     case 'C': {
       input_pointer = 0;
       has_output = false;
+      has_error = false;
       memset(input, 0, sizeof(input));
       break;
     }
@@ -332,6 +334,7 @@ void loop(void) {
       if (parse_eval_result == NULL) {
         snprintf(output, MAX_OUTPUT_SIZE, "ERROR");
         has_output = true;
+        has_error = true;
         return;
       }
 
@@ -358,6 +361,8 @@ void loop(void) {
     }
 
     default: {
+      if (has_error) return;
+
       if (has_output) {
         has_output = false;
         memset(input, 0, sizeof(input));
