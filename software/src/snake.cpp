@@ -4,7 +4,7 @@
 
 #include "video.h"
 
-#define TICK_SPEED 250
+#define BASE_TICK_SPEED 1000
 
 #define GRID_SIZE 10
 #define FIELD_ROWS 18
@@ -19,10 +19,11 @@
 
 typedef enum { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } Direction;
 
-typedef enum { GS_GAME_OVER, GS_PLAYING } GameState;
+typedef enum { GS_MENU, GS_PLAYING, GS_GAME_OVER } GameState;
 
+static uint8_t difficulty = 4;
 static Direction dir = DIR_RIGHT;
-static GameState state = GS_PLAYING;
+static GameState state = GS_MENU;
 static uint8_t snake[MAX_SNAKE_LENGTH][2];
 static uint16_t fruit[2];
 static uint16_t len = 1;
@@ -57,11 +58,25 @@ static void draw_score() {
 }
 
 static void draw_game_over() {
-    if (state != GS_GAME_OVER) return;
-
     video_out.setCursor(FIELD_X + FIELD_WIDTH / 2 - 55,
                         FIELD_Y + 3 * GRID_SIZE);
     video_out.print("GAME OVER!");
+}
+
+static void draw_menu() {
+    video_out.setCursor(0, GRID_SIZE * 3);
+    video_out.setTextSize(4);
+    video_out.println("SNAKE!");
+    video_out.setTextSize(2);
+    video_out.println();
+
+    video_out.println("Select Difficulty:\n");
+    video_out.println("1 = Very Easy");
+    video_out.println("2 = Easy");
+    video_out.println("3 = Normal");
+    video_out.println("4 = Hard");
+    video_out.println("5 = Very Hard");
+    video_out.println("6 = Extremely Hard");
 }
 
 static void update_fruit() {
@@ -75,8 +90,6 @@ static void update_fruit() {
 }
 
 static void step_game() {
-    if (state != GS_PLAYING) return;
-
     // Update snake tail
     for (uint16_t i = len - 1; i > 0; i--) {
         snake[i][0] = snake[i - 1][0];
@@ -129,8 +142,20 @@ static void step_game() {
 }
 
 void snake_handle_key(char read_key) {
+    if (state == GS_MENU) {
+        if (read_key < '1' && read_key > '6') return;
+
+        difficulty = (read_key - 0x30 - 1) * 4;
+        if (difficulty == 0) difficulty = 1;
+
+        state = GS_PLAYING;
+
+        return;
+    }
+
     if (state == GS_GAME_OVER) {
         reset_game();
+        return;
     }
 
     switch (read_key) {
@@ -159,7 +184,7 @@ void snake_handle_key(char read_key) {
 static void reset_game() {
     len = 1;
     dir = DIR_RIGHT;
-    state = GS_PLAYING;
+    state = GS_MENU;
 
     // Init snake head to center of field
     snake[0][0] = FIELD_X + (FIELD_WIDTH / 2 - ((FIELD_WIDTH / 2) % GRID_SIZE));
@@ -180,15 +205,25 @@ void snake_render() {
     video_out.setTextSize(2);
     video_out.setTextColor(0xFF);
 
-    if (millis() - last_tick >= TICK_SPEED) {
-        last_tick = millis();
+    switch (state) {
+        case GS_GAME_OVER:
+            draw_game_over();
 
-        step_game();
+        case GS_PLAYING:
+            if (state == GS_PLAYING && millis() - last_tick >= (BASE_TICK_SPEED / difficulty)) {
+                last_tick = millis();
+
+                step_game();
+            }
+
+            draw_score();
+            draw_field();
+            draw_fruit();
+            draw_snake();
+            break;
+
+        case GS_MENU:
+            draw_menu();
+            break;
     }
-
-    draw_score();
-    draw_field();
-    draw_fruit();
-    draw_snake();
-    draw_game_over();
 }
