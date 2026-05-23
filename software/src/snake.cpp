@@ -146,7 +146,7 @@ void snake_handle_key(char read_key) {
         if (read_key < '1' && read_key > '6') return;
 
         difficulty = (read_key - 0x30 - 1) * 4;
-        if (difficulty == 0) difficulty = 1;
+        if (difficulty == 0) difficulty = 2;
 
         state = GS_PLAYING;
 
