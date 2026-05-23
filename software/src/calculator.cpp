@@ -170,6 +170,8 @@ static void handle_key(CalculatorState* state, char read_key) {
 
 void calculator_enter() { reset_cursor_blink(&calculator_state); }
 
+void calculator_exit() {}
+
 void calculator_render() { render_display(&calculator_state); }
 
 void calculator_handle_key(char read_key) {

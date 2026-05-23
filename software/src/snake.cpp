@@ -199,6 +199,8 @@ void snake_enter() {
     last_tick = millis();
 }
 
+void snake_exit() {}
+
 void snake_render() {
     video_out.waitForFrame();
     video_out.fillScreen(0);
@@ -210,7 +212,8 @@ void snake_render() {
             draw_game_over();
 
         case GS_PLAYING:
-            if (state == GS_PLAYING && millis() - last_tick >= (BASE_TICK_SPEED / difficulty)) {
+            if (state == GS_PLAYING &&
+                millis() - last_tick >= (BASE_TICK_SPEED / difficulty)) {
                 last_tick = millis();
 
                 step_game();
