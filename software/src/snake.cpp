@@ -143,7 +143,7 @@ static void step_game() {
 
 void snake_handle_key(char read_key) {
     if (state == GS_MENU) {
-        if (read_key < '1' && read_key > '6') return;
+        if (read_key < '1' || read_key > '6') return;
 
         difficulty = (read_key - 0x30 - 1) * 4;
         if (difficulty == 0) difficulty = 2;
