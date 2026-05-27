@@ -114,12 +114,12 @@ Sprite spr_explosion = {.data = data_explosion, .width = 13, .height = 8};
 GameState state;
 uint16_t score;
 
-Entity** enemies;
+Entity** enemies = NULL;
 uint8_t living_enemies_count;
 
 Entity player;
 
-Entity** bullets;
+Entity** bullets = NULL;
 
 static void draw_game_over() {
     video_out.setCursor(130, 20);
@@ -174,9 +174,26 @@ static void draw_menu() {
     video_out.println("Press any key");
 }
 
-static void reset_game() {
-    state = GS_MENU;
-    score = 0;
+void free_resources() {
+    if (enemies != NULL) {
+        for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
+            if (enemies[i] != NULL) free(enemies[i]);
+        }
+        free(enemies);
+        enemies = NULL;
+    }
+
+    if (bullets != NULL) {
+        for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
+            if (bullets[i] != NULL) free(bullets[i]);
+        }
+        free(bullets);
+        bullets = NULL;
+    }
+}
+
+static void reset_board() {
+    free_resources();
 
     bullets = (Entity**)calloc(MAX_BULLET_COUNT, sizeof(Entity*));
     if (bullets == NULL) return;
@@ -207,6 +224,13 @@ static void reset_game() {
     player.y = 210;
     player.dx = 0;
     player.dy = 0;
+}
+
+static void reset_game() {
+    state = GS_MENU;
+    score = 0;
+
+    reset_board();
 }
 
 void invaders_enter() { reset_game(); }
@@ -319,6 +343,11 @@ void update_bullets() {
         free(enemies[remove_next]);
         enemies[remove_next] = NULL;
         remove_next = -1;
+
+        if (living_enemies_count <= 0) {
+            reset_board();
+            return;
+        }
     }
 
     for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
@@ -356,6 +385,7 @@ void update_bullets() {
                 state = GS_PAUSED;
 
                 e->sprite = &spr_explosion;
+                break;
             }
         }
     }
@@ -441,17 +471,7 @@ void draw_player() {
     draw_sprite(player.sprite, player.x, player.y, ENTITY_SCALE);
 }
 
-void invaders_exit() {
-    for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
-        if (enemies[i] != NULL) free(enemies[i]);
-    }
-    free(enemies);
-
-    for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
-        if (bullets[i] != NULL) free(bullets[i]);
-    }
-    free(bullets);
-}
+void invaders_exit() { free_resources(); }
 
 void invaders_render() {
     static uint32_t last_enemy_update_tick = millis();
@@ -465,7 +485,12 @@ void invaders_render() {
 
     switch (state) {
         case GS_GAME_OVER:
+            draw_score();
+            draw_enemies();
+            draw_player();
+            draw_bullets();
             draw_game_over();
+            break;
 
         case GS_PAUSED:
             if (paused_tick == -1) {
@@ -479,14 +504,16 @@ void invaders_render() {
             if (state == GS_PLAYING) {
                 update_player();
                 update_bullets();
+            }
 
+            if (state == GS_PLAYING) {
                 if (millis() - last_enemy_update_tick >
                     1000 * living_enemies_count / 60) {
                     last_enemy_update_tick = millis();
                     update_enemies();
                 }
 
-                if (millis() - last_enemy_shoot_tick > 1000) {
+                if (millis() - last_enemy_shoot_tick > 2000) {
                     last_enemy_shoot_tick = millis();
                     enemy_shoot();
                 }
