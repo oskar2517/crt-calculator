@@ -19,6 +19,16 @@
 #define BULLET_STEP_SIZE 4
 #define MAX_BULLET_COUNT 40
 
+#define BARRICADE_GROUPS 4
+#define BARRICADE_COLS 12
+#define BARRICADE_ROWS 8
+#define BARRICADE_BLOCK_STEP 2
+#define BARRICADE_BLOCKS_PER_GROUP (BARRICADE_COLS * BARRICADE_ROWS)
+#define BARRICADES_COUNT (BARRICADE_GROUPS * BARRICADE_COLS * BARRICADE_ROWS)
+
+#define EXPLOSION_COLS 5
+#define EXPLOSION_ROWS 5
+
 #define ENTITY_SCALE 2
 
 #define START_Y 50
@@ -37,6 +47,7 @@ typedef enum {
     ENTITY_ENEMY,
     ENTITY_PLAYER,
     ENTITY_BULLET,
+    ENTITY_BARRICADE
 } EntityType;
 
 typedef struct {
@@ -101,6 +112,22 @@ static const uint8_t data_explosion[] = {
     0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
     0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00};
 
+static const uint8_t data_barricade_block[] = {0xFF};
+
+static const uint8_t mask_barricade_shape[BARRICADE_ROWS][BARRICADE_COLS] = {
+    {0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0}, {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0},
+    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1},
+    {1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1}, {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
+};
+
+static const uint8_t mask_explosion_shape[EXPLOSION_ROWS][EXPLOSION_COLS] = {
+    {0, 0, 1, 0, 0},
+    {0, 1, 1, 1, 0},
+    {1, 1, 1, 1, 1},
+    {0, 1, 1, 1, 0},
+    {0, 0, 1, 0, 0}};
+
 static Sprite spr_enemy1 = {.data = data_enemy1, .width = 11, .height = 8};
 
 static Sprite spr_enemy2 = {.data = data_enemy2, .width = 11, .height = 8};
@@ -112,11 +139,15 @@ static Sprite spr_bullet = {.data = data_bullet, .width = 1, .height = 4};
 static Sprite spr_explosion = {
     .data = data_explosion, .width = 13, .height = 8};
 
+static Sprite spr_barricade_block = {
+    .data = data_barricade_block, .width = 1, .height = 1};
+
 static GameState state;
 static uint16_t score;
 
 static Entity** enemies = NULL;
 static uint8_t living_enemies_count;
+
 static int8_t pending_enemy_removal_index = -1;
 static uint32_t last_enemy_update_tick = 0;
 static uint32_t last_enemy_shoot_tick = 0;
@@ -126,6 +157,8 @@ static int64_t paused_tick = -1;
 static Entity player;
 
 static Entity** bullets = NULL;
+
+static Entity** barricades = NULL;
 
 static void draw_game_over() {
     video_out.setCursor(130, 20);
@@ -182,8 +215,60 @@ static void free_resources() {
         bullets = NULL;
     }
 
+    if (barricades != NULL) {
+        for (uint16_t i = 0; i < BARRICADES_COUNT; i++) {
+            if (barricades[i] != NULL) free(barricades[i]);
+        }
+        free(barricades);
+        barricades = NULL;
+    }
+
     pending_enemy_removal_index = -1;
     reset_timers();
+}
+
+static Entity* allocate_barricade_block(int16_t x, int16_t y) {
+    Entity* b = (Entity*)malloc(sizeof(Entity));
+    if (b == NULL) return NULL;
+
+    b->sprite = &spr_barricade_block;
+    b->type = ENTITY_BARRICADE;
+    b->x = x;
+    b->y = y;
+    b->dx = 0;
+    b->dy = 0;
+
+    return b;
+}
+
+static uint16_t barricade_index(uint8_t group, uint8_t x, uint8_t y) {
+    return (uint16_t)(group * BARRICADE_BLOCKS_PER_GROUP +
+                      y * BARRICADE_COLS + x);
+}
+
+static void create_barricades() {
+    int16_t barricade_width = BARRICADE_COLS * BARRICADE_BLOCK_STEP;
+    int16_t barricade_spacing =
+        (END_X - BARRICADE_GROUPS * barricade_width) / (BARRICADE_GROUPS + 1);
+    int16_t barricade_y = 185;
+
+    for (uint8_t group = 0; group < BARRICADE_GROUPS; group++) {
+        int16_t barricade_x =
+            barricade_spacing + group * (barricade_width + barricade_spacing);
+
+        for (uint8_t y = 0; y < BARRICADE_ROWS; y++) {
+            for (uint8_t x = 0; x < BARRICADE_COLS; x++) {
+                if (mask_barricade_shape[y][x] == 0) continue;
+
+                Entity* block = allocate_barricade_block(
+                    barricade_x + x * BARRICADE_BLOCK_STEP,
+                    barricade_y + y * BARRICADE_BLOCK_STEP);
+                if (block == NULL) return;
+
+                barricades[barricade_index(group, x, y)] = block;
+            }
+        }
+    }
 }
 
 static void reset_board() {
@@ -195,6 +280,11 @@ static void reset_board() {
     living_enemies_count = ENEMY_COUNT;
     enemies = (Entity**)calloc(ENEMY_COUNT, sizeof(Entity*));
     if (enemies == NULL) return;
+
+    barricades = (Entity**)calloc(BARRICADES_COUNT, sizeof(Entity*));
+    if (barricades == NULL) return;
+
+    create_barricades();
 
     for (uint8_t row = 0; row < ENEMY_ROWS; row++) {
         for (uint8_t col = 0; col < ENEMY_COLS; col++) {
@@ -232,6 +322,37 @@ static void reset_game() {
 static bool check_collision(Entity* a, Entity* b) {
     return a->x < b->x + entity_width(b) && a->x + entity_width(a) > b->x &&
            a->y < b->y + entity_height(b) && a->y + entity_height(a) > b->y;
+}
+
+static void destroy_barricade_block(uint8_t group, int8_t x, int8_t y) {
+    if (barricades == NULL) return;
+    if (group >= BARRICADE_GROUPS) return;
+    if (x < 0 || x >= BARRICADE_COLS) return;
+    if (y < 0 || y >= BARRICADE_ROWS) return;
+
+    uint16_t index = barricade_index(group, (uint8_t)x, (uint8_t)y);
+    Entity* e = barricades[index];
+    if (e != NULL) {
+        free(e);
+        barricades[index] = NULL;
+    }
+}
+
+static void explode_barricade(uint16_t hit_index) {
+    uint8_t group = (uint8_t)(hit_index / BARRICADE_BLOCKS_PER_GROUP);
+    uint8_t local_index = (uint8_t)(hit_index % BARRICADE_BLOCKS_PER_GROUP);
+    uint8_t hit_x = local_index % BARRICADE_COLS;
+    uint8_t hit_y = local_index / BARRICADE_COLS;
+
+    for (uint8_t y = 0; y < EXPLOSION_ROWS; y++) {
+        for (uint8_t x = 0; x < EXPLOSION_COLS; x++) {
+            if (mask_explosion_shape[y][x] == 0) continue;
+
+            destroy_barricade_block(
+                group, (int8_t)(hit_x + x - EXPLOSION_COLS / 2),
+                (int8_t)(hit_y + y - EXPLOSION_ROWS / 2));
+        }
+    }
 }
 
 static void create_bullet(uint16_t x, uint16_t y, int16_t dx, int16_t dy) {
@@ -382,6 +503,21 @@ static void update_bullets() {
                 return;
             }
         }
+
+        for (uint16_t j = 0; j < BARRICADES_COUNT; j++) {
+            if (barricades == NULL) break;
+
+            Entity* e = barricades[j];
+            if (e == NULL) continue;
+
+            if (check_collision(b, e)) {
+                free(b);
+                bullets[i] = NULL;
+
+                explode_barricade(j);
+                return;
+            }
+        }
     }
 }
 
@@ -439,6 +575,17 @@ static void draw_score() {
     video_out.print("Score: ");
     video_out.print(score);
     video_out.drawFastHLine(0, 40, 250, 0xFF);
+}
+
+static void draw_barricades() {
+    if (barricades == NULL) return;
+
+    for (uint16_t i = 0; i < BARRICADES_COUNT; i++) {
+        Entity* e = barricades[i];
+        if (e == NULL) continue;
+
+        draw_sprite(e->sprite, e->x, e->y, ENTITY_SCALE);
+    }
 }
 
 static void draw_enemies() {
@@ -535,6 +682,7 @@ void invaders_render() {
                 }
             }
 
+            draw_barricades();
             draw_score();
             draw_enemies();
             draw_player();

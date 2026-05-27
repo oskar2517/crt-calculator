@@ -22,11 +22,11 @@ static uint8_t current_mode_index = 0;
 static uint32_t last_clear_press = 0;
 
 static AppMode app_modes[] = {
+        {invaders_enter, invaders_exit, invaders_render, invaders_handle_key},
     {calculator_enter, calculator_exit, calculator_render,
      calculator_handle_key},
     {snake_enter, snake_exit, snake_render, snake_handle_key},
     {bad_apple_enter, bad_apple_exit, bad_apple_render, bad_apple_handle_key},
-    {invaders_enter, invaders_exit, invaders_render, invaders_handle_key},
 };
 
 static uint8_t app_mode_count() {
@@ -63,6 +63,10 @@ static bool handle_mode_shortcut(char read_key) {
 }
 
 void setup() {
+    // Enable 12V boost converter
+    pinMode(26, OUTPUT);
+    digitalWrite(26, HIGH);
+    
     Serial.begin(9600);
     video_out.begin();
     if (!LittleFS.begin(true)) {
@@ -70,10 +74,6 @@ void setup() {
         return;
     }
     current_mode()->enter();
-
-    // Enable 12V boost converter
-    pinMode(26, OUTPUT);
-    digitalWrite(26, HIGH);
 }
 
 void loop() {
