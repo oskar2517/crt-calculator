@@ -116,6 +116,7 @@ uint16_t score;
 
 Entity** enemies = NULL;
 uint8_t living_enemies_count;
+static int8_t pending_enemy_removal_index = -1;
 
 Entity player;
 
@@ -190,6 +191,8 @@ void free_resources() {
         free(bullets);
         bullets = NULL;
     }
+
+    pending_enemy_removal_index = -1;
 }
 
 static void reset_board() {
@@ -337,12 +340,12 @@ bool check_collision(Entity* a, Entity* b) {
 }
 
 void update_bullets() {
-    static int8_t remove_next = -1;
+    if (pending_enemy_removal_index != -1) {
+        uint8_t enemy_index = (uint8_t)pending_enemy_removal_index;
+        pending_enemy_removal_index = -1;
 
-    if (remove_next != -1) {
-        free(enemies[remove_next]);
-        enemies[remove_next] = NULL;
-        remove_next = -1;
+        free(enemies[enemy_index]);
+        enemies[enemy_index] = NULL;
 
         if (living_enemies_count <= 0) {
             reset_board();
@@ -381,11 +384,11 @@ void update_bullets() {
                 free(b);
                 bullets[i] = NULL;
 
-                remove_next = j;
+                pending_enemy_removal_index = j;
                 state = GS_PAUSED;
 
                 e->sprite = &spr_explosion;
-                break;
+                return;
             }
         }
     }
