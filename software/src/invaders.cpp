@@ -242,8 +242,8 @@ static Entity* allocate_barricade_block(int16_t x, int16_t y) {
 }
 
 static uint16_t barricade_index(uint8_t group, uint8_t x, uint8_t y) {
-    return (uint16_t)(group * BARRICADE_BLOCKS_PER_GROUP +
-                      y * BARRICADE_COLS + x);
+    return (uint16_t)(group * BARRICADE_BLOCKS_PER_GROUP + y * BARRICADE_COLS +
+                      x);
 }
 
 static void create_barricades() {
@@ -348,9 +348,9 @@ static void explode_barricade(uint16_t hit_index) {
         for (uint8_t x = 0; x < EXPLOSION_COLS; x++) {
             if (mask_explosion_shape[y][x] == 0) continue;
 
-            destroy_barricade_block(
-                group, (int8_t)(hit_x + x - EXPLOSION_COLS / 2),
-                (int8_t)(hit_y + y - EXPLOSION_ROWS / 2));
+            destroy_barricade_block(group,
+                                    (int8_t)(hit_x + x - EXPLOSION_COLS / 2),
+                                    (int8_t)(hit_y + y - EXPLOSION_ROWS / 2));
         }
     }
 }
@@ -577,32 +577,14 @@ static void draw_score() {
     video_out.drawFastHLine(0, 40, 250, 0xFF);
 }
 
-static void draw_barricades() {
-    if (barricades == NULL) return;
+static void draw_entities(Entity** entities, uint32_t size) {
+    if (entities == NULL) return;
 
-    for (uint16_t i = 0; i < BARRICADES_COUNT; i++) {
-        Entity* e = barricades[i];
+    for (uint16_t i = 0; i < size; i++) {
+        Entity* e = entities[i];
         if (e == NULL) continue;
 
         draw_sprite(e->sprite, e->x, e->y, ENTITY_SCALE);
-    }
-}
-
-static void draw_enemies() {
-    for (uint16_t i = 0; i < ENEMY_COUNT; i++) {
-        Entity* e = enemies[i];
-        if (e == NULL) continue;
-
-        draw_sprite(e->sprite, e->x, e->y, ENTITY_SCALE);
-    }
-}
-
-static void draw_bullets() {
-    for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
-        Entity* b = bullets[i];
-        if (b == NULL) continue;
-
-        draw_sprite(b->sprite, b->x, b->y, ENTITY_SCALE);
     }
 }
 
@@ -646,10 +628,11 @@ void invaders_render() {
     switch (state) {
         case GS_GAME_OVER:
             draw_score();
-            draw_enemies();
             draw_player();
-            draw_bullets();
             draw_game_over();
+            draw_entities(barricades, BARRICADES_COUNT);
+            draw_entities(enemies, ENEMY_COUNT);
+            draw_entities(bullets, MAX_BULLET_COUNT);
             break;
 
         case GS_PAUSED:
@@ -682,11 +665,11 @@ void invaders_render() {
                 }
             }
 
-            draw_barricades();
+            draw_entities(barricades, BARRICADES_COUNT);
+            draw_entities(enemies, ENEMY_COUNT);
+            draw_entities(bullets, MAX_BULLET_COUNT);
             draw_score();
-            draw_enemies();
             draw_player();
-            draw_bullets();
             break;
 
         case GS_MENU:
