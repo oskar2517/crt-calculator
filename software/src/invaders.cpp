@@ -49,7 +49,7 @@ typedef struct {
 } Entity;
 
 // TODO: pack to integers
-static const uint8_t data_invader1[] = {
+static const uint8_t data_enemy1[] = {
     0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00,
     0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
     0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
@@ -60,7 +60,7 @@ static const uint8_t data_invader1[] = {
     0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
 };
 
-static const uint8_t data_invader2[] = {
+static const uint8_t data_enemy2[] = {
     0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00,
     0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
     0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF,
@@ -101,15 +101,16 @@ static const uint8_t data_explosion[] = {
     0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
     0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00};
 
-static Sprite spr_enemy1 = {.data = data_invader1, .width = 11, .height = 8};
+static Sprite spr_enemy1 = {.data = data_enemy1, .width = 11, .height = 8};
 
-static Sprite spr_enemy2 = {.data = data_invader2, .width = 11, .height = 8};
+static Sprite spr_enemy2 = {.data = data_enemy2, .width = 11, .height = 8};
 
 static Sprite spr_player = {.data = data_player, .width = 13, .height = 8};
 
 static Sprite spr_bullet = {.data = data_bullet, .width = 1, .height = 4};
 
-static Sprite spr_explosion = {.data = data_explosion, .width = 13, .height = 8};
+static Sprite spr_explosion = {
+    .data = data_explosion, .width = 13, .height = 8};
 
 static GameState state;
 static uint16_t score;
@@ -162,29 +163,6 @@ static void reset_timers() {
     last_enemy_shoot_tick = now;
     last_player_shot_tick = now;
     paused_tick = -1;
-}
-
-static void draw_menu() {
-    static uint32_t last_animation_tick = millis();
-    static uint8_t spr = 1;
-
-    if (millis() - last_animation_tick > 500) {
-        last_animation_tick = millis();
-        spr ^= 1;
-    }
-
-    if (spr == 1) {
-        draw_sprite(&spr_enemy1, END_X / 2 - spr_enemy1.width * 6 / 2, 40, 6);
-    } else {
-        draw_sprite(&spr_enemy2, END_X / 2 - spr_enemy2.width * 6 / 2, 40, 6);
-    }
-
-    video_out.setCursor(45, 100);
-    video_out.setTextSize(3);
-    video_out.println("INVADERS!");
-    video_out.setTextSize(2);
-    video_out.setCursor(46, 140);
-    video_out.println("Press any key");
 }
 
 static void free_resources() {
@@ -251,7 +229,10 @@ static void reset_game() {
     reset_board();
 }
 
-void invaders_enter() { reset_game(); }
+static bool check_collision(Entity* a, Entity* b) {
+    return a->x < b->x + entity_width(b) && a->x + entity_width(a) > b->x &&
+           a->y < b->y + entity_height(b) && a->y + entity_height(a) > b->y;
+}
 
 static void create_bullet(uint16_t x, uint16_t y, int16_t dx, int16_t dy) {
     int8_t free_index = -1;
@@ -347,11 +328,6 @@ static void update_enemies() {
             }
         }
     }
-}
-
-static bool check_collision(Entity* a, Entity* b) {
-    return a->x < b->x + entity_width(b) && a->x + entity_width(a) > b->x &&
-           a->y < b->y + entity_height(b) && a->y + entity_height(a) > b->y;
 }
 
 static void update_bullets() {
@@ -487,6 +463,31 @@ static void draw_player() {
     draw_sprite(player.sprite, player.x, player.y, ENTITY_SCALE);
 }
 
+static void draw_menu() {
+    static uint32_t last_animation_tick = millis();
+    static uint8_t spr = 1;
+
+    if (millis() - last_animation_tick > 500) {
+        last_animation_tick = millis();
+        spr ^= 1;
+    }
+
+    if (spr == 1) {
+        draw_sprite(&spr_enemy1, END_X / 2 - spr_enemy1.width * 6 / 2, 40, 6);
+    } else {
+        draw_sprite(&spr_enemy2, END_X / 2 - spr_enemy2.width * 6 / 2, 40, 6);
+    }
+
+    video_out.setCursor(45, 100);
+    video_out.setTextSize(3);
+    video_out.println("INVADERS!");
+    video_out.setTextSize(2);
+    video_out.setCursor(46, 140);
+    video_out.println("Press any key");
+}
+
+void invaders_enter() { reset_game(); }
+
 void invaders_exit() { free_resources(); }
 
 void invaders_render() {
@@ -511,7 +512,8 @@ void invaders_render() {
                 paused_tick = -1;
                 state = GS_PLAYING;
             } else {
-                last_player_shot_tick = millis(); // Prevent accumulating shots while paused
+                // Prevent accumulating shots while paused
+                last_player_shot_tick = millis();
             }
 
         case GS_PLAYING:
