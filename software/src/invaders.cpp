@@ -117,6 +117,10 @@ uint16_t score;
 Entity** enemies = NULL;
 uint8_t living_enemies_count;
 static int8_t pending_enemy_removal_index = -1;
+static uint32_t last_enemy_update_tick = 0;
+static uint32_t last_enemy_shoot_tick = 0;
+static uint32_t last_player_shot_tick = 0;
+static int64_t paused_tick = -1;
 
 Entity player;
 
@@ -150,6 +154,14 @@ static int16_t entity_width(Entity* entity) {
 
 static int16_t entity_height(Entity* entity) {
     return scaled_sprite_height(entity->sprite);
+}
+
+static void reset_timers() {
+    uint32_t now = millis();
+    last_enemy_update_tick = now;
+    last_enemy_shoot_tick = now;
+    last_player_shot_tick = now;
+    paused_tick = -1;
 }
 
 static void draw_menu() {
@@ -193,6 +205,7 @@ void free_resources() {
     }
 
     pending_enemy_removal_index = -1;
+    reset_timers();
 }
 
 static void reset_board() {
@@ -227,6 +240,8 @@ static void reset_board() {
     player.y = 210;
     player.dx = 0;
     player.dy = 0;
+
+    reset_timers();
 }
 
 static void reset_game() {
@@ -395,8 +410,6 @@ void update_bullets() {
 }
 
 void update_player() {
-    static uint32_t last_shot = millis();
-
     keypad.getKeys();
 
     bool move_left = false;
@@ -412,8 +425,8 @@ void update_player() {
                     move_right = true;
                     break;
                 case '8':
-                    if (millis() - last_shot > 200) {
-                        last_shot = millis();
+                    if (millis() - last_player_shot_tick > 200) {
+                        last_player_shot_tick = millis();
                         create_bullet(
                             player.x + entity_width(&player) / 2 -
                                 scaled_sprite_width(&spr_bullet) / 2,
@@ -477,10 +490,6 @@ void draw_player() {
 void invaders_exit() { free_resources(); }
 
 void invaders_render() {
-    static uint32_t last_enemy_update_tick = millis();
-    static uint32_t last_enemy_shoot_tick = millis();
-    static int64_t paused_tick = -1;
-
     video_out.waitForFrame();
     video_out.fillScreen(0);
     video_out.setTextColor(0xFF);
@@ -501,6 +510,8 @@ void invaders_render() {
             } else if (millis() - paused_tick > 200) {
                 paused_tick = -1;
                 state = GS_PLAYING;
+            } else {
+                last_player_shot_tick = millis(); // Prevent accumulating shots while paused
             }
 
         case GS_PLAYING:
