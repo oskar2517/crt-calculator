@@ -11,7 +11,7 @@ static uint8_t buffer[5096];
 static uint32_t buffer_len;
 static uint32_t last_frame_read;
 
-void read_frame_into_buffer() {
+static void read_frame_into_buffer() {
     uint32_t len = 0;
 
     file.read((uint8_t*)&len, sizeof(len));
