@@ -49,7 +49,7 @@ typedef struct {
 } Entity;
 
 // TODO: pack to integers
-const uint8_t data_invader1[] = {
+static const uint8_t data_invader1[] = {
     0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00,
     0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
     0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
@@ -60,7 +60,7 @@ const uint8_t data_invader1[] = {
     0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
 };
 
-const uint8_t data_invader2[] = {
+static const uint8_t data_invader2[] = {
     0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00,
     0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
     0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF,
@@ -71,7 +71,7 @@ const uint8_t data_invader2[] = {
     0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00,
 };
 
-const uint8_t data_player[] = {
+static const uint8_t data_player[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
@@ -83,14 +83,14 @@ const uint8_t data_player[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
-const uint8_t data_bullet[] = {
+static const uint8_t data_bullet[] = {
     0xFF,
     0xFF,
     0xFF,
     0xFF,
 };
 
-const uint8_t data_explosion[] = {
+static const uint8_t data_explosion[] = {
     0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
     0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00,
     0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -101,30 +101,30 @@ const uint8_t data_explosion[] = {
     0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
     0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00};
 
-Sprite spr_enemy1 = {.data = data_invader1, .width = 11, .height = 8};
+static Sprite spr_enemy1 = {.data = data_invader1, .width = 11, .height = 8};
 
-Sprite spr_enemy2 = {.data = data_invader2, .width = 11, .height = 8};
+static Sprite spr_enemy2 = {.data = data_invader2, .width = 11, .height = 8};
 
-Sprite spr_player = {.data = data_player, .width = 13, .height = 8};
+static Sprite spr_player = {.data = data_player, .width = 13, .height = 8};
 
-Sprite spr_bullet = {.data = data_bullet, .width = 1, .height = 4};
+static Sprite spr_bullet = {.data = data_bullet, .width = 1, .height = 4};
 
-Sprite spr_explosion = {.data = data_explosion, .width = 13, .height = 8};
+static Sprite spr_explosion = {.data = data_explosion, .width = 13, .height = 8};
 
-GameState state;
-uint16_t score;
+static GameState state;
+static uint16_t score;
 
-Entity** enemies = NULL;
-uint8_t living_enemies_count;
+static Entity** enemies = NULL;
+static uint8_t living_enemies_count;
 static int8_t pending_enemy_removal_index = -1;
 static uint32_t last_enemy_update_tick = 0;
 static uint32_t last_enemy_shoot_tick = 0;
 static uint32_t last_player_shot_tick = 0;
 static int64_t paused_tick = -1;
 
-Entity player;
+static Entity player;
 
-Entity** bullets = NULL;
+static Entity** bullets = NULL;
 
 static void draw_game_over() {
     video_out.setCursor(130, 20);
@@ -187,7 +187,7 @@ static void draw_menu() {
     video_out.println("Press any key");
 }
 
-void free_resources() {
+static void free_resources() {
     if (enemies != NULL) {
         for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
             if (enemies[i] != NULL) free(enemies[i]);
@@ -253,7 +253,7 @@ static void reset_game() {
 
 void invaders_enter() { reset_game(); }
 
-void create_bullet(uint16_t x, uint16_t y, int16_t dx, int16_t dy) {
+static void create_bullet(uint16_t x, uint16_t y, int16_t dx, int16_t dy) {
     int8_t free_index = -1;
     for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
         if (bullets[i] == NULL) {
@@ -277,7 +277,7 @@ void create_bullet(uint16_t x, uint16_t y, int16_t dx, int16_t dy) {
     bullets[free_index] = b;
 }
 
-void enemy_shoot() {
+static void enemy_shoot() {
     bool found_front = false;
     Entity* front_enemies[ENEMY_COLS] = {NULL};
 
@@ -306,7 +306,7 @@ void enemy_shoot() {
                   shooter->y + entity_height(shooter) + 1, 0, BULLET_STEP_SIZE);
 }
 
-void update_enemies() {
+static void update_enemies() {
     static uint8_t current_sprite = 0;
 
     bool move_down = false;
@@ -349,12 +349,12 @@ void update_enemies() {
     }
 }
 
-bool check_collision(Entity* a, Entity* b) {
+static bool check_collision(Entity* a, Entity* b) {
     return a->x < b->x + entity_width(b) && a->x + entity_width(a) > b->x &&
            a->y < b->y + entity_height(b) && a->y + entity_height(a) > b->y;
 }
 
-void update_bullets() {
+static void update_bullets() {
     if (pending_enemy_removal_index != -1) {
         uint8_t enemy_index = (uint8_t)pending_enemy_removal_index;
         pending_enemy_removal_index = -1;
@@ -409,7 +409,7 @@ void update_bullets() {
     }
 }
 
-void update_player() {
+static void update_player() {
     keypad.getKeys();
 
     bool move_left = false;
@@ -465,7 +465,7 @@ static void draw_score() {
     video_out.drawFastHLine(0, 40, 250, 0xFF);
 }
 
-void draw_enemies() {
+static void draw_enemies() {
     for (uint16_t i = 0; i < ENEMY_COUNT; i++) {
         Entity* e = enemies[i];
         if (e == NULL) continue;
@@ -474,7 +474,7 @@ void draw_enemies() {
     }
 }
 
-void draw_bullets() {
+static void draw_bullets() {
     for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
         Entity* b = bullets[i];
         if (b == NULL) continue;
@@ -483,7 +483,7 @@ void draw_bullets() {
     }
 }
 
-void draw_player() {
+static void draw_player() {
     draw_sprite(player.sprite, player.x, player.y, ENTITY_SCALE);
 }
 
