@@ -11,7 +11,7 @@
 #define ENEMY_COLS 7
 #define ENEMY_SPACING 30
 #define ENEMY_STEP_SIZE_X 4
-#define ENEMY_STEP_SIZE_Y 10
+#define ENEMY_STEP_SIZE_Y 5
 #define ENEMY_COUNT (ENEMY_ROWS * ENEMY_COLS)
 
 #define PLAYER_STEP_SIZE 4
@@ -19,6 +19,7 @@
 #define BULLET_STEP_SIZE 4
 #define MAX_BULLET_COUNT 40
 
+#define BARRICADE_Y 185
 #define BARRICADE_GROUPS 4
 #define BARRICADE_COLS 12
 #define BARRICADE_ROWS 8
@@ -250,7 +251,6 @@ static void create_barricades() {
     int16_t barricade_width = BARRICADE_COLS * BARRICADE_BLOCK_STEP;
     int16_t barricade_spacing =
         (END_X - BARRICADE_GROUPS * barricade_width) / (BARRICADE_GROUPS + 1);
-    int16_t barricade_y = 185;
 
     for (uint8_t group = 0; group < BARRICADE_GROUPS; group++) {
         int16_t barricade_x =
@@ -262,7 +262,7 @@ static void create_barricades() {
 
                 Entity* block = allocate_barricade_block(
                     barricade_x + x * BARRICADE_BLOCK_STEP,
-                    barricade_y + y * BARRICADE_BLOCK_STEP);
+                    BARRICADE_Y + y * BARRICADE_BLOCK_STEP);
                 if (block == NULL) return;
 
                 barricades[barricade_index(group, x, y)] = block;
