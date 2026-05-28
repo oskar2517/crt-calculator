@@ -11,7 +11,7 @@
 #define ENEMY_COLS 7
 #define ENEMY_SPACING 30
 #define ENEMY_STEP_SIZE_X 4
-#define ENEMY_STEP_SIZE_Y 5
+#define ENEMY_STEP_SIZE_Y 8
 #define ENEMY_COUNT (ENEMY_ROWS * ENEMY_COLS)
 
 #define PLAYER_STEP_SIZE 4
@@ -19,7 +19,7 @@
 #define BULLET_STEP_SIZE 4
 #define MAX_BULLET_COUNT 40
 
-#define BARRICADE_Y 185
+#define BARRICADES_Y 185
 #define BARRICADE_GROUPS 4
 #define BARRICADE_COLS 12
 #define BARRICADE_ROWS 8
@@ -262,7 +262,7 @@ static void create_barricades() {
 
                 Entity* block = allocate_barricade_block(
                     barricade_x + x * BARRICADE_BLOCK_STEP,
-                    BARRICADE_Y + y * BARRICADE_BLOCK_STEP);
+                    BARRICADES_Y + y * BARRICADE_BLOCK_STEP);
                 if (block == NULL) return;
 
                 barricades[barricade_index(group, x, y)] = block;
@@ -443,7 +443,7 @@ static void update_enemies() {
             e->dx = -e->dx;
             e->y += ENEMY_STEP_SIZE_Y;
 
-            if (e->y > 210) {
+            if (e->y > BARRICADES_Y - 12) {
                 state = GS_GAME_OVER;
                 return;
             }
