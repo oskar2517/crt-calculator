@@ -199,33 +199,34 @@ static void reset_timers() {
     paused_tick = -1;
 }
 
-static void free_resources() {
-    if (enemies != NULL) {
-        for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
-            if (enemies[i] != NULL) free(enemies[i]);
-        }
-        free(enemies);
-        enemies = NULL;
-    }
+static void free_enemies() {
+    if (enemies == NULL) return;
 
-    if (bullets != NULL) {
-        for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
-            if (bullets[i] != NULL) free(bullets[i]);
-        }
-        free(bullets);
-        bullets = NULL;
+    for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
+        if (enemies[i] != NULL) free(enemies[i]);
     }
+    free(enemies);
+    enemies = NULL;
+}
 
-    if (barricades != NULL) {
-        for (uint16_t i = 0; i < BARRICADES_COUNT; i++) {
-            if (barricades[i] != NULL) free(barricades[i]);
-        }
-        free(barricades);
-        barricades = NULL;
+static void free_bullets() {
+    if (bullets == NULL) return;
+
+    for (uint8_t i = 0; i < MAX_BULLET_COUNT; i++) {
+        if (bullets[i] != NULL) free(bullets[i]);
     }
+    free(bullets);
+    bullets = NULL;
+}
 
-    pending_enemy_removal_index = -1;
-    reset_timers();
+static void free_barricades() {
+    if (barricades == NULL) return;
+
+    for (uint16_t i = 0; i < BARRICADES_COUNT; i++) {
+        if (barricades[i] != NULL) free(barricades[i]);
+    }
+    free(barricades);
+    barricades = NULL;
 }
 
 static Entity* allocate_barricade_block(int16_t x, int16_t y) {
@@ -272,7 +273,11 @@ static void create_barricades() {
 }
 
 static void reset_board() {
-    free_resources();
+    free_enemies();
+    free_bullets();
+
+    pending_enemy_removal_index = -1;
+    reset_timers();
 
     bullets = (Entity**)calloc(MAX_BULLET_COUNT, sizeof(Entity*));
     if (bullets == NULL) return;
@@ -280,11 +285,6 @@ static void reset_board() {
     living_enemies_count = ENEMY_COUNT;
     enemies = (Entity**)calloc(ENEMY_COUNT, sizeof(Entity*));
     if (enemies == NULL) return;
-
-    barricades = (Entity**)calloc(BARRICADES_COUNT, sizeof(Entity*));
-    if (barricades == NULL) return;
-
-    create_barricades();
 
     for (uint8_t row = 0; row < ENEMY_ROWS; row++) {
         for (uint8_t col = 0; col < ENEMY_COLS; col++) {
@@ -317,6 +317,13 @@ static void reset_game() {
     score = 0;
 
     reset_board();
+
+    free_barricades();
+
+    barricades = (Entity**)calloc(BARRICADES_COUNT, sizeof(Entity*));
+    if (barricades == NULL) return;
+
+    create_barricades();
 }
 
 static bool check_collision(Entity* a, Entity* b) {
@@ -617,7 +624,14 @@ static void draw_menu() {
 
 void invaders_enter() { reset_game(); }
 
-void invaders_exit() { free_resources(); }
+void invaders_exit() {
+    free_enemies();
+    free_barricades();
+    free_bullets();
+
+    pending_enemy_removal_index = -1;
+    reset_timers();
+}
 
 void invaders_render() {
     video_out.waitForFrame();
