@@ -6,15 +6,15 @@ Thie is the repository for my CRT calculator project. It contains the software f
 
 ## Project Idea
 
-I knew about the completely intgerated, self-scanning flat CRTs available from China for a long time but never had a clear idea of what I could do with one. Then one day, YouTube recommended me [this video](https://www.youtube.com/watch?v=pjzK-Lppa1c), which inspired me to make my own interpretation of a CRT calculator.
+I knew about the completely intgerated, self-scanning flat CRTs available from China for a long time but never had a clear vision of what I could do with one. Then one day, YouTube recommended me [this video](https://www.youtube.com/watch?v=pjzK-Lppa1c), which inspired me to make my own interpretation of a CRT calculator.
 
 ## Implementation
 
-My project differs from the original in a few aspects. Firstly, I wanted my calculator to be battery-operated. It should be able to chargef through USB power delivery. Secondly, I wanted mine to have a case, which would contain all the necessary components.
+My project differs from the original in a few aspects. Firstly, I wanted my calculator to be battery-operated. It should be able to chargef through USB power delivery. Secondly, I wanted mine to have a case, which would contain all the necessary components. The finished calculator ended up weighing almost exactly one kilogram, so it's still not what one would generally consider pocketable :).
 
 ### PCB Design
 
-I designed the PCB in EasyEDA. It contains all the components necessary including an ESP32 microcontroller, a charge controller, a 12V boost converter for the CRT and, of course, the keypad. All external components are attached using JST connectors.
+I designed the PCB in EasyEDA. It contains all the components necessary including an ESP32 microcontroller, a charge controller, a 12V boost converter for the CRT and, of course, the keypad. I used a relatively old model of ESP32 because it still has a built-in DAC which I need for the composite video generation. All external components are attached using JST connectors.
 
 ![Schematic](/assets//pcb.png)
 
