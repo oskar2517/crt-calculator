@@ -23,6 +23,8 @@
 #define GORILLA_CENTER_X(x) ((x) + GORILLA_BODY_WIDTH / 2)
 #define GORILLA_CENTER_Y(y) ((y) - GORILLA_BODY_HEIGHT / 2)
 
+#define GORILLA_ARM_OFFSET(up) ((up) ? -1 : 9)
+
 typedef enum {
     GS_SIMULATE_BANANA,
     GS_READ_ANGLE,
@@ -53,6 +55,11 @@ static Player current_player;
 static GameState state;
 static uint16_t player_one_pos[2];
 static uint16_t player_two_pos[2];
+static bool player_one_arms[2];
+static bool player_two_arms[2];
+static uint32_t last_arm_animation_tick;
+static bool player_one_alive;
+static bool player_two_alive;
 
 static uint16_t input;
 static float simulation_time;
@@ -90,6 +97,13 @@ static void reset_game() {
     current_player = PLAYER_ONE;
     state = GS_READ_ANGLE;
     input = 0;
+    player_one_arms[0] = false;
+    player_one_arms[1] = false;
+    player_two_arms[0] = false;
+    player_two_arms[1] = false;
+    player_one_alive = true;
+    player_two_alive = true;
+    last_arm_animation_tick = 0;
     reset_simulation();
     reset_impact();
 
@@ -144,7 +158,7 @@ static int16_t calculate_banana_x_position(uint16_t start_x) {
 template <std::size_t N>
 static void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
                         uint8_t width, uint8_t height = 0, bool flip_x = false,
-                        bool flip_y = false) {
+                        bool flip_y = false, bool inverted = false) {
     for (uint16_t i = 0; i < data->size(); ++i) {
         uint8_t xx = i % width;
         uint8_t yy = i / width;
@@ -153,7 +167,7 @@ static void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
         if (flip_y) yy = height - 1 - yy;
 
         if (data->test(i)) {
-            video_out.drawPixel(x + xx, y + yy, 255);
+            video_out.drawPixel(x + xx, y + yy, inverted ? 0 : 0xFF);
         }
     }
 }
@@ -169,10 +183,19 @@ static void draw_gameover() {
 
 static void draw_gorilla(int16_t x, int16_t y, bool left_arm_up,
                          bool right_arm_up) {
-    draw_bitset(&body_bits, x, y, GORILLA_BODY_WIDTH);
+    int8_t previous_left_arm_offset = GORILLA_ARM_OFFSET(!left_arm_up);
+    int8_t previous_right_arm_offset = GORILLA_ARM_OFFSET(!right_arm_up);
+    int8_t left_arm_offset = GORILLA_ARM_OFFSET(left_arm_up);
+    int8_t right_arm_offset = GORILLA_ARM_OFFSET(right_arm_up);
 
-    int8_t left_arm_offset = left_arm_up ? -1 : 9;
-    int8_t right_arm_offset = right_arm_up ? -1 : 9;
+    draw_bitset(&arm_bits, x - 4, y + previous_left_arm_offset,
+                GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, false, !left_arm_up,
+                true);
+    draw_bitset(&arm_bits, x + GORILLA_BODY_WIDTH - 3,
+                y + previous_right_arm_offset, GORILLA_ARM_WIDTH,
+                GORILLA_ARM_HEIGHT, true, !right_arm_up, true);
+
+    draw_bitset(&body_bits, x, y, GORILLA_BODY_WIDTH);
 
     draw_bitset(&arm_bits, x - 4, y + left_arm_offset, GORILLA_ARM_WIDTH,
                 GORILLA_ARM_HEIGHT, false, left_arm_up);
@@ -266,11 +289,6 @@ static void place_gorillas() {
 
     player_two_pos[0] = random(width - 80, width - 40);
     player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
-
-    draw_gorilla(player_one_pos[0], player_one_pos[1] - GORILLA_BODY_HEIGHT,
-                 false, false);
-    draw_gorilla(player_two_pos[0], player_two_pos[1] - GORILLA_BODY_HEIGHT,
-                 false, false);
 }
 
 static void switch_player() {
@@ -341,14 +359,14 @@ static void simulate_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= video_out.width()) {
+    if (x < 0 || x >= video_out.width() || y >= video_out.height()) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
         return;
     }
 
-    if (y < 0 || y >= video_out.height()) return;
+    if (y < 0) return;
 
     uint8_t** framebuffer = video_framebuffer_lines();
 
@@ -387,23 +405,41 @@ void gorillas_render() {
 
     copy_level_into_framebuffer();
 
+    if (last_arm_animation_tick != 0 &&
+        millis() - last_arm_animation_tick > 500) {
+        player_one_arms[0] = false;
+        player_two_arms[1] = false;
+    }
+
+    if (player_one_alive) {
+        draw_gorilla(player_one_pos[0], player_one_pos[1] - GORILLA_BODY_HEIGHT,
+                     player_one_arms[0], player_one_arms[1]);
+    }
+
+    if (player_two_alive) {
+        draw_gorilla(player_two_pos[0], player_two_pos[1] - GORILLA_BODY_HEIGHT,
+                     player_two_arms[0], player_two_arms[1]);
+    }
+
     // Perform explosion
     if (impact_pos[0] != -1) {
         uint8_t** framebuffer = video_framebuffer_lines();
         int16_t x = impact_pos[0];
         int16_t y = impact_pos[1];
 
-        // Gorilla
+        // If gorilla hit
         if (framebuffer[y][x] == 0xFF) {
             // Decide whether right or left gorilla (player 1 or player 2)
             if (x > video_out.width() / 2) {
                 video_out.fillCircle(GORILLA_CENTER_X(player_two_pos[0]),
                                      GORILLA_CENTER_Y(player_two_pos[1]), 25,
                                      0);
+                player_two_alive = false;
             } else {
                 video_out.fillCircle(GORILLA_CENTER_X(player_one_pos[0]),
                                      GORILLA_CENTER_Y(player_one_pos[1]), 25,
                                      0);
+                player_one_alive = false;
             }
 
             state = GS_GAMEOVER;
@@ -445,6 +481,13 @@ void gorillas_handle_key(char read_key) {
         } else if (state == GS_READ_VELOCITY) {
             velocity = input;
             state = GS_SIMULATE_BANANA;
+
+            last_arm_animation_tick = millis();
+            if (current_player == PLAYER_ONE) {
+                player_one_arms[0] = true;
+            } else {
+                player_two_arms[1] = true;
+            }
         }
 
         input = 0;
