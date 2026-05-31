@@ -506,7 +506,7 @@ static void simulate_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= screen_width || y >= screen_height) {
+    if (x < 0 || x >= screen_width || y >= screen_height || y < -500) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
