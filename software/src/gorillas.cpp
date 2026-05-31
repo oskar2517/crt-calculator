@@ -57,7 +57,8 @@ static uint16_t player_one_pos[2];
 static uint16_t player_two_pos[2];
 static bool player_one_arms[2];
 static bool player_two_arms[2];
-static uint32_t last_arm_animation_tick;
+static uint32_t last_toss_animation_tick;
+static uint32_t last_win_animation_tick;
 static bool player_one_alive;
 static bool player_two_alive;
 
@@ -103,7 +104,8 @@ static void reset_game() {
     player_two_arms[1] = false;
     player_one_alive = true;
     player_two_alive = true;
-    last_arm_animation_tick = 0;
+    last_toss_animation_tick = 0;
+    last_win_animation_tick = 0;
     reset_simulation();
     reset_impact();
 
@@ -405,10 +407,20 @@ void gorillas_render() {
 
     copy_level_into_framebuffer();
 
-    if (last_arm_animation_tick != 0 &&
-        millis() - last_arm_animation_tick > 500) {
+    if (state != GS_GAMEOVER && last_toss_animation_tick != 0 &&
+        millis() - last_toss_animation_tick > 500) {
         player_one_arms[0] = false;
         player_two_arms[1] = false;
+    }
+
+    if (state == GS_GAMEOVER && millis() - last_win_animation_tick > 500) {
+        last_win_animation_tick = millis();
+
+        player_two_arms[0] = !player_two_arms[0];
+        player_two_arms[1] = !player_two_arms[1];
+
+        player_one_arms[0] = !player_one_arms[0];
+        player_one_arms[1] = !player_one_arms[1];
     }
 
     if (player_one_alive) {
@@ -435,11 +447,15 @@ void gorillas_render() {
                                      GORILLA_CENTER_Y(player_two_pos[1]), 25,
                                      0);
                 player_two_alive = false;
+                player_one_arms[0] = true;
+                player_one_arms[1] = false;
             } else {
                 video_out.fillCircle(GORILLA_CENTER_X(player_one_pos[0]),
                                      GORILLA_CENTER_Y(player_one_pos[1]), 25,
                                      0);
                 player_one_alive = false;
+                player_two_arms[0] = true;
+                player_two_arms[1] = false;
             }
 
             state = GS_GAMEOVER;
@@ -482,7 +498,7 @@ void gorillas_handle_key(char read_key) {
             velocity = input;
             state = GS_SIMULATE_BANANA;
 
-            last_arm_animation_tick = millis();
+            last_toss_animation_tick = millis();
             if (current_player == PLAYER_ONE) {
                 player_one_arms[0] = true;
             } else {
