@@ -11,6 +11,8 @@
 #define GORILLA_BODY_HEIGHT 29
 #define GORILLA_ARM_WIDTH 8
 #define GORILLA_ARM_HEIGHT 11
+#define BANANA_WIDTH 4
+#define BANANA_HEIGHT 7
 
 #define MAX_INPUT_SIZE 5
 #define TEXT_Y_START 15
@@ -35,6 +37,7 @@ const std::bitset<551> body_bits(
     "11111111000111111111111111100000000111111000000000000111111110000000000011"
     "11111100000000001100100111000000000111111111100000000011000000110000000000"
     "111111110000000000011111111000000");
+const std::bitset<28> banana_bits("1100111001110111011111101100");
 
 static uint8_t* level_data = NULL;
 static int16_t angle;
@@ -110,7 +113,8 @@ static int16_t calculate_banana_y_position(uint16_t start_y) {
     float initial_y_velocity = std::sin(angle_radians) * (float)velocity;
 
     return (int16_t)(start_y + (-1.0f * initial_y_velocity * simulation_time) +
-                     (0.5f * SIMULATION_GRAVITY * simulation_time * simulation_time));
+                     (0.5f * SIMULATION_GRAVITY * simulation_time *
+                      simulation_time));
 }
 
 static int16_t calculate_banana_x_position(uint16_t start_x) {
@@ -234,7 +238,46 @@ static void switch_player() {
     }
 }
 
-static void draw_banana() {
+static void draw_banana(int16_t x, int16_t y) {
+    uint8_t rotation = ((uint32_t)(simulation_time * 5)) % 4;
+
+    int16_t screen_width = video_out.width();
+    int16_t screen_height = video_out.height();
+
+    int16_t rotated_width = rotation % 2 == 0 ? BANANA_WIDTH : BANANA_HEIGHT;
+    int16_t rotated_height = rotation % 2 == 0 ? BANANA_HEIGHT : BANANA_WIDTH;
+
+    int16_t target_x = x - rotated_width / 2;
+    int16_t target_y = y - rotated_height / 2;
+    
+    int16_t render_x;
+    int16_t render_y;
+
+    switch (rotation) {
+        case 1:
+            render_x = target_y;
+            render_y = screen_width - target_x - BANANA_HEIGHT;
+            break;
+        case 2:
+            render_x = screen_width - target_x - BANANA_WIDTH;
+            render_y = screen_height - target_y - BANANA_HEIGHT;
+            break;
+        case 3:
+            render_x = screen_height - target_y - BANANA_WIDTH;
+            render_y = target_x;
+            break;
+        default:
+            render_x = target_x;
+            render_y = target_y;
+            break;
+    }
+
+    video_out.setRotation(rotation);
+    draw_bitset(&banana_bits, render_x, render_y, BANANA_WIDTH, BANANA_HEIGHT);
+    video_out.setRotation(0);
+}
+
+static void simulate_banana() {
     if (state != GS_SIMULATE_BANANA) return;
 
     uint16_t start_x;
@@ -255,7 +298,7 @@ static void draw_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= video_out.width() || y < 0) {
+    if (x < 0 || x >= video_out.width() || y < 0 || y >= video_out.height()) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
@@ -274,7 +317,7 @@ static void draw_banana() {
         return;
     }
 
-    video_out.fillCircle(x, y, 5, 0xFF);
+    draw_banana(x, y);
 }
 
 void gorillas_enter() {
@@ -309,7 +352,7 @@ void gorillas_render() {
     draw_read_angle();
     draw_read_velocity();
 
-    draw_banana();
+    simulate_banana();
 }
 
 void gorillas_handle_key(char read_key) {
