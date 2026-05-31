@@ -14,7 +14,7 @@
 #define BANANA_WIDTH 4
 #define BANANA_HEIGHT 7
 
-#define TEXT_Y_START 15
+#define TEXT_Y_START 25
 
 #define SIMULATION_TICK_SPEED 20
 #define SIMULATION_GRAVITY 9.8f
@@ -70,10 +70,7 @@ static int16_t previous_banana_pos[2];
 static bool has_previous_banana_pos;
 
 static bool allocate_level_data() {
-    uint16_t width = video_out.width();
-    uint16_t height = video_out.height();
-
-    level_data = (uint8_t*)malloc((uint32_t)width * height);
+    level_data = (uint8_t*)malloc((uint32_t)screen_width * screen_height);
 
     return level_data != NULL;
 }
@@ -121,11 +118,9 @@ static void copy_framebuffer_into_level() {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return;
 
-    uint16_t width = video_out.width();
-    uint16_t height = video_out.height();
 
-    for (uint16_t y = 0; y < height; y++) {
-        std::memcpy(level_data + (uint32_t)y * width, framebuffer[y], width);
+    for (uint16_t y = 0; y < screen_height; y++) {
+        std::memcpy(level_data + (uint32_t)y * screen_width, framebuffer[y], screen_width);
     }
 }
 
@@ -135,11 +130,8 @@ static void copy_level_into_framebuffer() {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return;
 
-    uint16_t width = video_out.width();
-    uint16_t height = video_out.height();
-
-    for (uint16_t y = 0; y < height; y++) {
-        std::memcpy(framebuffer[y], level_data + (uint32_t)y * width, width);
+    for (uint16_t y = 0; y < screen_height; y++) {
+        std::memcpy(framebuffer[y], level_data + (uint32_t)y * screen_width, screen_width);
     }
 }
 
@@ -227,13 +219,13 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
 static void draw_houses() {
     uint16_t x = 0;
 
-    while (x < video_out.width()) {
+    while (x < screen_width) {
         uint8_t width = random(30, 61);
         uint8_t height = random(30, 150);
         // Upper bound is 255 exclusive. 255 is reserved for gorillas
         uint8_t color = random(200, 255);
 
-        draw_house(x, video_out.height() - height, width, height, color);
+        draw_house(x, screen_height - height, width, height, color);
 
         x += width + 2;
     }
@@ -258,8 +250,6 @@ static void draw_read_velocity() {
 }
 
 static uint16_t calculate_gorilla_y_position(uint16_t x) {
-    uint16_t screen_width = video_out.width();
-    uint16_t screen_height = video_out.height();
     uint8_t** framebuffer = video_framebuffer_lines();
 
     if (framebuffer == NULL) return screen_height;
@@ -287,12 +277,10 @@ static uint16_t calculate_gorilla_y_position(uint16_t x) {
 }
 
 static void place_gorillas() {
-    uint16_t width = video_out.width();
-
     player_one_pos[0] = random(10, 50);
     player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
 
-    player_two_pos[0] = random(width - 80, width - 40);
+    player_two_pos[0] = random(screen_width - 80, screen_width - 40);
     player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
 }
 
@@ -306,9 +294,6 @@ static void switch_player() {
 
 static void draw_banana(int16_t x, int16_t y) {
     uint8_t rotation = ((uint32_t)(simulation_time * 5)) % 4;
-
-    int16_t screen_width = video_out.width();
-    int16_t screen_height = video_out.height();
 
     int16_t rotated_width = rotation % 2 == 0 ? BANANA_WIDTH : BANANA_HEIGHT;
     int16_t rotated_height = rotation % 2 == 0 ? BANANA_HEIGHT : BANANA_WIDTH;
@@ -354,9 +339,6 @@ static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
     int16_t steps = dx > dy ? dx : dy;
     if (steps == 0) steps = 1;
 
-    int16_t screen_width = video_out.width();
-    int16_t screen_height = video_out.height();
-
     for (int16_t i = 0; i <= steps; i++) {
         int16_t x = x0 + (int32_t)(x1 - x0) * i / steps;
         int16_t y = y0 + (int32_t)(y1 - y0) * i / steps;
@@ -395,7 +377,7 @@ static void simulate_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= video_out.width() || y >= video_out.height()) {
+    if (x < 0 || x >= screen_width || y >= screen_height) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
@@ -489,7 +471,7 @@ void gorillas_render() {
         // If gorilla hit
         if (framebuffer[y][x] == 0xFF) {
             // Decide whether right or left gorilla (player 1 or player 2)
-            if (x > video_out.width() / 2) {
+            if (x > screen_width / 2) {
                 video_out.fillCircle(GORILLA_CENTER_X(player_two_pos[0]),
                                      GORILLA_CENTER_Y(player_two_pos[1]), 25,
                                      0);
