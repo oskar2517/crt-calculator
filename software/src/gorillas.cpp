@@ -281,7 +281,7 @@ static void generate_wind() {
 static void draw_wind() {
     if (wind == 0) return;
 
-    int16_t x = 70;
+    int16_t x = 180;
     int16_t y = TEXT_Y_START;
     int16_t wind_line = (int32_t)wind * 3 * screen_width / 320;
 
@@ -296,6 +296,8 @@ static void draw_wind() {
 }
 
 static void draw_sun() {
+    if (state == GS_GAMEOVER) return;
+
     uint16_t body_x = screen_width / 2 - SUN_BODY_WIDTH / 2;
     uint8_t body_y = 30;
 
