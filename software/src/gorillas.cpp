@@ -79,11 +79,14 @@ static void reset_impact() {
     impact_pos[1] = -1;
 }
 
+static void free_level() {
+    if (level_data == NULL) return;
+    free(level_data);
+    level_data = NULL;
+}
+
 static void reset_game() {
-    if (level_data != NULL) {
-        free(level_data);
-        level_data = NULL;
-    }
+    free_level();
 
     current_player = PLAYER_ONE;
     state = GS_READ_ANGLE;
@@ -154,6 +157,15 @@ static void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
             video_out.drawPixel(x + xx, y + yy, 255);
         }
     }
+}
+
+static void draw_gameover() {
+    if (state != GS_GAMEOVER) return;
+
+    video_out.setCursor(60, 40);
+    video_out.setTextSize(2);
+    video_out.println("GAME OVER!");
+    video_out.setTextSize(1);
 }
 
 static void draw_gorilla(int16_t x, int16_t y, bool left_arm_up,
@@ -312,7 +324,7 @@ static void simulate_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= video_out.width() || y < 0 || y >= video_out.height()) {
+    if (x < 0 || x >= video_out.width() || y >= video_out.height()) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
@@ -334,16 +346,19 @@ static void simulate_banana() {
     draw_banana(x, y);
 }
 
-void gorillas_enter() {
-    reset_game();
-
+static void generate_level() {
     video_out.fillScreen(0);
     draw_houses();
     place_gorillas();
     copy_framebuffer_into_level();
 }
 
-void gorillas_exit() { reset_game(); }
+void gorillas_enter() {
+    reset_game();
+    generate_level();
+}
+
+void gorillas_exit() { free_level(); }
 
 void gorillas_render() {
     video_out.waitForFrame();
@@ -386,11 +401,17 @@ void gorillas_render() {
     video_out.setCursor(0, TEXT_Y_START);
     draw_read_angle();
     draw_read_velocity();
-
     simulate_banana();
+    draw_gameover();
 }
 
 void gorillas_handle_key(char read_key) {
+    if (state == GS_GAMEOVER) {
+        reset_game();
+        generate_level();
+        return;
+    }
+
     if (state != GS_READ_ANGLE && state != GS_READ_VELOCITY) return;
 
     if (read_key >= '0' && read_key <= '9') {
