@@ -21,7 +21,15 @@
 #define SIMULATION_GRAVITY 9.8f
 #define PI_F 3.14159265358979323846f
 
-typedef enum { GS_SIMULATE_BANANA, GS_READ_ANGLE, GS_READ_VELOCITY } GameState;
+#define GORILLA_CENTER_X(x) ((x) + GORILLA_BODY_WIDTH / 2)
+#define GORILLA_CENTER_Y(y) ((y) - GORILLA_BODY_HEIGHT / 2)
+
+typedef enum {
+    GS_SIMULATE_BANANA,
+    GS_READ_ANGLE,
+    GS_READ_VELOCITY,
+    GS_GAMEOVER
+} GameState;
 
 typedef enum { PLAYER_ONE, PLAYER_TWO } Player;
 
@@ -66,6 +74,11 @@ static void reset_simulation() {
     last_simulation_tick = 0;
 }
 
+static void reset_impact() {
+    impact_pos[0] = -1;
+    impact_pos[1] = -1;
+}
+
 static void reset_game() {
     if (level_data != NULL) {
         free(level_data);
@@ -76,6 +89,7 @@ static void reset_game() {
     state = GS_READ_ANGLE;
     input = 0;
     reset_simulation();
+    reset_impact();
 
     allocate_level_data();
 }
@@ -249,7 +263,7 @@ static void draw_banana(int16_t x, int16_t y) {
 
     int16_t target_x = x - rotated_width / 2;
     int16_t target_y = y - rotated_height / 2;
-    
+
     int16_t render_x;
     int16_t render_y;
 
@@ -341,7 +355,28 @@ void gorillas_render() {
 
     // Perform explosion
     if (impact_pos[0] != -1) {
-        video_out.fillCircle(impact_pos[0], impact_pos[1], 5, 0);
+        uint8_t** framebuffer = video_framebuffer_lines();
+        int16_t x = impact_pos[0];
+        int16_t y = impact_pos[1];
+
+        // Gorilla
+        if (framebuffer[y][x] == 0xFF) {
+            // Decide whether right or left gorilla (player 1 or player 2)
+            if (x > video_out.width() / 2) {
+                video_out.fillCircle(GORILLA_CENTER_X(player_two_pos[0]),
+                                     GORILLA_CENTER_Y(player_two_pos[1]), 25,
+                                     0);
+            } else {
+                video_out.fillCircle(GORILLA_CENTER_X(player_one_pos[0]),
+                                     GORILLA_CENTER_Y(player_one_pos[1]), 25,
+                                     0);
+            }
+
+            state = GS_GAMEOVER;
+        } else {
+            video_out.fillCircle(x, y, 5, 0);
+        }
+
         impact_pos[0] = -1;
         impact_pos[1] = -1;
     }
