@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
 #include <bitset>
+#include <cmath>
 #include <cstring>
 #include <random>
 
@@ -13,6 +14,10 @@
 
 #define MAX_INPUT_SIZE 5
 #define TEXT_Y_START 15
+
+#define SIMULATION_TICK_SPEED 20
+#define SIMULATION_GRAVITY 9.8f
+#define PI_F 3.14159265358979323846f
 
 typedef enum { GS_SIMULATE_BANANA, GS_READ_ANGLE, GS_READ_VELOCITY } GameState;
 
@@ -36,8 +41,13 @@ static int16_t angle;
 static int16_t velocity;
 static Player current_player;
 static GameState state;
+static uint16_t player_one_pos[2];
+static uint16_t player_two_pos[2];
 
 static uint16_t input;
+static float simulation_time;
+static uint32_t last_simulation_tick;
+static int16_t impact_pos[2];
 
 static bool allocate_level_data() {
     uint16_t width = video_out.width();
@@ -46,6 +56,11 @@ static bool allocate_level_data() {
     level_data = (uint8_t*)malloc((uint32_t)width * height);
 
     return level_data != NULL;
+}
+
+static void reset_simulation() {
+    simulation_time = 0;
+    last_simulation_tick = 0;
 }
 
 static void reset_game() {
@@ -57,6 +72,7 @@ static void reset_game() {
     current_player = PLAYER_ONE;
     state = GS_READ_ANGLE;
     input = 0;
+    reset_simulation();
 
     allocate_level_data();
 }
@@ -87,6 +103,22 @@ static void copy_level_into_framebuffer() {
     for (uint16_t y = 0; y < height; y++) {
         std::memcpy(framebuffer[y], level_data + (uint32_t)y * width, width);
     }
+}
+
+static int16_t calculate_banana_y_position(uint16_t start_y) {
+    float angle_radians = (float)angle / 180.0f * PI_F;
+    float initial_y_velocity = std::sin(angle_radians) * (float)velocity;
+
+    return (int16_t)(start_y + (-1.0f * initial_y_velocity * simulation_time) +
+                     (0.5f * SIMULATION_GRAVITY * simulation_time * simulation_time));
+}
+
+static int16_t calculate_banana_x_position(uint16_t start_x) {
+    float angle_radians = angle / 180.0f * PI_F;
+    float initial_x_velocity = std::cos(angle_radians) * velocity;
+    if (current_player == PLAYER_TWO) initial_x_velocity *= -1.0f;
+
+    return (int16_t)(start_x + initial_x_velocity * simulation_time);
 }
 
 template <std::size_t N>
@@ -168,20 +200,81 @@ static void draw_read_velocity() {
     }
 }
 
-static void place_gorilla(int16_t x) {
-    int16_t y = 0;
+static uint16_t calculate_gorilla_y_position(int16_t x) {
+    uint16_t y = 0;
 
     uint8_t** framebuffer = video_framebuffer_lines();
     while (framebuffer[y][x + GORILLA_BODY_WIDTH / 2] == 0) {
         y++;
     }
 
-    draw_gorilla(x, y - GORILLA_BODY_HEIGHT, false, false);
+    return y;
 }
 
 static void place_gorillas() {
-    place_gorilla(10);
-    place_gorilla(video_out.width() - 40);
+    uint16_t width = video_out.width();
+
+    player_one_pos[0] = random(10, 50);
+    player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
+
+    player_two_pos[0] = random(width - 40, width - 80);
+    player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
+
+    draw_gorilla(player_one_pos[0], player_one_pos[1] - GORILLA_BODY_HEIGHT,
+                 false, false);
+    draw_gorilla(player_two_pos[0], player_two_pos[1] - GORILLA_BODY_HEIGHT,
+                 false, false);
+}
+
+static void switch_player() {
+    if (current_player == PLAYER_ONE) {
+        current_player = PLAYER_TWO;
+    } else {
+        current_player = PLAYER_ONE;
+    }
+}
+
+static void draw_banana() {
+    if (state != GS_SIMULATE_BANANA) return;
+
+    uint16_t start_x;
+    uint16_t start_y;
+    if (current_player == PLAYER_ONE) {
+        start_x = player_one_pos[0];
+        start_y = player_one_pos[1] - GORILLA_BODY_HEIGHT - 5;
+    } else {
+        start_x = player_two_pos[0];
+        start_y = player_two_pos[1] - GORILLA_BODY_HEIGHT - 5;
+    }
+
+    if (millis() - last_simulation_tick > SIMULATION_TICK_SPEED) {
+        last_simulation_tick = millis();
+        simulation_time += 0.1f;
+    }
+
+    int16_t x = calculate_banana_x_position(start_x);
+    int16_t y = calculate_banana_y_position(start_y);
+
+    if (x < 0 || x >= video_out.width() || y < 0) {
+        state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+        return;
+    }
+
+    uint8_t** framebuffer = video_framebuffer_lines();
+
+    if (framebuffer[y][x] != 0) {
+        impact_pos[0] = x;
+        impact_pos[1] = y;
+
+        state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+        return;
+    }
+
+    video_out.fillCircle(x, y, 5, 0xFF);
 }
 
 void gorillas_enter() {
@@ -203,11 +296,20 @@ void gorillas_render() {
 
     copy_level_into_framebuffer();
 
+    // Perform explosion
+    if (impact_pos[0] != -1) {
+        video_out.fillCircle(impact_pos[0], impact_pos[1], 5, 0);
+        impact_pos[0] = -1;
+        impact_pos[1] = -1;
+    }
+
     copy_framebuffer_into_level();
 
     video_out.setCursor(0, TEXT_Y_START);
     draw_read_angle();
     draw_read_velocity();
+
+    draw_banana();
 }
 
 void gorillas_handle_key(char read_key) {
