@@ -13,6 +13,10 @@
 #define GORILLA_ARM_HEIGHT 11
 #define BANANA_WIDTH 4
 #define BANANA_HEIGHT 7
+#define SUN_BODY_WIDTH 41
+#define SUN_BODY_HEIGHT 30
+#define SUN_MOUTH_REG_WIDTH 15
+#define SUN_MOUTH_REG_HEIGHT 4
 
 #define TEXT_Y_START 25
 
@@ -34,10 +38,10 @@ typedef enum {
 
 typedef enum { PLAYER_ONE, PLAYER_TWO } Player;
 
-const std::bitset<88> arm_bits(
+const std::bitset<88> gorilla_arm_bits(
     "11111000011111000011111000111110000111110001111100011111001111100011111000"
     "11110000111000");
-const std::bitset<551> body_bits(
+const std::bitset<551> gorilla_body_bits(
     "01111100000001111101111100000000011111111110000000001111111111000000000111"
     "11111110000000001111111111000000000111110111110000000111110011111100000111"
     "11100001111111111111000000111111111111000000011111111111100000001111111111"
@@ -46,7 +50,29 @@ const std::bitset<551> body_bits(
     "11111111000111111111111111100000000111111000000000000111111110000000000011"
     "11111100000000001100100111000000000111111111100000000011000000110000000000"
     "111111110000000000011111111000000");
+
 const std::bitset<28> banana_bits("1100111001110111011111101100");
+
+const std::bitset<1230> sun_body_bits(
+    "00000000000000000000100000000000000000000000000000000100000001000000010000"
+    "00000000000000000000100000001000000100000000000000000000000000100000010000"
+    "00100000000000000000011000000010000010000010000000010000000000001000000100"
+    "11111110100000000100000000000000110000011111111111000000110000000000000000"
+    "01011111111111111111001000000000000000000001111111111111111111100000000000"
+    "01110000011111111111111111111100000001000000011111111111111111111111111100"
+    "11110000000000001111111111111111111111111000000000000000111111111111111111"
+    "11111110000000000000000111111111111111111111111100000000111111111111111111"
+    "11111111111111111111111000000001111111110111110111111111000000000000000011"
+    "11111100011100011111111000000000000000001111111101111101111111111000000000"
+    "00011111111111111111111111111100111100000111000001111111111111111111110000"
+    "00010000000000000111111111111111111110000000000000000000010111111111111111"
+    "11001000000000000000001100000111111111110000001100000000000000100000010011"
+    "11111010000000010000000000011000000010000010000010000000010000000000000000"
+    "00100000010000001000000000000000000000000010000000100000010000000000000000"
+    "00000000010000000100000001000000000000000000000000000000001000000000000000"
+    "0000000000000000000000000100000000000000000000");
+const std::bitset<60> sun_mouth_regular_bits(
+    "000001111100000000110000011000011000000000110100000000000001");
 
 static uint8_t* level_data = NULL;
 static int16_t angle;
@@ -120,9 +146,9 @@ static void copy_framebuffer_into_level() {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return;
 
-
     for (uint16_t y = 0; y < screen_height; y++) {
-        std::memcpy(level_data + (uint32_t)y * screen_width, framebuffer[y], screen_width);
+        std::memcpy(level_data + (uint32_t)y * screen_width, framebuffer[y],
+                    screen_width);
     }
 }
 
@@ -133,7 +159,8 @@ static void copy_level_into_framebuffer() {
     if (framebuffer == NULL) return;
 
     for (uint16_t y = 0; y < screen_height; y++) {
-        std::memcpy(framebuffer[y], level_data + (uint32_t)y * screen_width, screen_width);
+        std::memcpy(framebuffer[y], level_data + (uint32_t)y * screen_width,
+                    screen_width);
     }
 }
 
@@ -158,8 +185,8 @@ static int16_t calculate_banana_x_position(uint16_t start_x) {
 
 template <std::size_t N>
 static void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
-                        uint8_t width, uint8_t height = 0, bool flip_x = false,
-                        bool flip_y = false, bool inverted = false) {
+                        uint8_t width, uint8_t height, bool flip_x, bool flip_y,
+                        uint8_t color) {
     for (uint16_t i = 0; i < data->size(); ++i) {
         uint8_t xx = i % width;
         uint8_t yy = i / width;
@@ -168,7 +195,7 @@ static void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
         if (flip_y) yy = height - 1 - yy;
 
         if (data->test(i)) {
-            video_out.drawPixel(x + xx, y + yy, inverted ? 0 : 0xFF);
+            video_out.drawPixel(x + xx, y + yy, color);
         }
     }
 }
@@ -189,20 +216,22 @@ static void draw_gorilla(int16_t x, int16_t y, bool left_arm_up,
     int8_t left_arm_offset = GORILLA_ARM_OFFSET(left_arm_up);
     int8_t right_arm_offset = GORILLA_ARM_OFFSET(right_arm_up);
 
-    draw_bitset(&arm_bits, x - 4, y + previous_left_arm_offset,
-                GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, false, !left_arm_up,
-                true);
-    draw_bitset(&arm_bits, x + GORILLA_BODY_WIDTH - 3,
+    draw_bitset(&gorilla_arm_bits, x - 4, y + previous_left_arm_offset,
+                GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, false, !left_arm_up, 0);
+    draw_bitset(&gorilla_arm_bits, x + GORILLA_BODY_WIDTH - 3,
                 y + previous_right_arm_offset, GORILLA_ARM_WIDTH,
-                GORILLA_ARM_HEIGHT, true, !right_arm_up, true);
+                GORILLA_ARM_HEIGHT, true, !right_arm_up, 0);
 
-    draw_bitset(&body_bits, x, y, GORILLA_BODY_WIDTH);
+    draw_bitset(&gorilla_body_bits, x, y, GORILLA_BODY_WIDTH,
+                GORILLA_BODY_HEIGHT, false, false, 0xFF);
 
-    draw_bitset(&arm_bits, x - 4, y + left_arm_offset, GORILLA_ARM_WIDTH,
-                GORILLA_ARM_HEIGHT, false, left_arm_up);
+    draw_bitset(&gorilla_arm_bits, x - 4, y + left_arm_offset,
+                GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, false, left_arm_up,
+                0xFF);
 
-    draw_bitset(&arm_bits, x + GORILLA_BODY_WIDTH - 3, y + right_arm_offset,
-                GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, true, right_arm_up);
+    draw_bitset(&gorilla_arm_bits, x + GORILLA_BODY_WIDTH - 3,
+                y + right_arm_offset, GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT,
+                true, right_arm_up, 0xFF);
 }
 
 // TODO: lit and unlit windows
@@ -250,18 +279,32 @@ static void generate_wind() {
 static void draw_wind() {
     if (wind == 0) return;
 
-    int16_t center_x = screen_width / 2;
+    int16_t x = 70;
     int16_t y = TEXT_Y_START;
     int16_t wind_line = (int32_t)wind * 3 * screen_width / 320;
 
     if (wind_line == 0) wind_line = wind > 0 ? 1 : -1;
 
-    int16_t end_x = center_x + wind_line;
+    int16_t end_x = x + wind_line;
     int16_t arrow_dir = wind > 0 ? -2 : 2;
 
-    video_out.drawLine(center_x, y, end_x, y, 0xFF);
+    video_out.drawLine(x, y, end_x, y, 0xFF);
     video_out.drawLine(end_x, y, end_x + arrow_dir, y - 2, 0xFF);
     video_out.drawLine(end_x, y, end_x + arrow_dir, y + 2, 0xFF);
+}
+
+static void draw_sun() {
+    uint16_t body_x = screen_width / 2 - SUN_BODY_WIDTH / 2;
+    uint8_t body_y = 30;
+
+    draw_bitset(&sun_body_bits, body_x, body_y, SUN_BODY_WIDTH, SUN_BODY_HEIGHT,
+                false, false, 150);
+
+    uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_REG_WIDTH / 2;
+    uint8_t mouth_y = body_y + 18;
+
+    draw_bitset(&sun_mouth_regular_bits, mouth_x, mouth_y, SUN_MOUTH_REG_WIDTH,
+                SUN_MOUTH_REG_HEIGHT, false, false, 0);
 }
 
 static void draw_read_angle() {
@@ -357,13 +400,13 @@ static void draw_banana(int16_t x, int16_t y) {
     }
 
     video_out.setRotation(rotation);
-    draw_bitset(&banana_bits, render_x, render_y, BANANA_WIDTH, BANANA_HEIGHT);
+    draw_bitset(&banana_bits, render_x, render_y, BANANA_WIDTH, BANANA_HEIGHT,
+                false, false, 0xFF);
     video_out.setRotation(0);
 }
 
 static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
-                                  int16_t y1, int16_t* hit_x,
-                                  int16_t* hit_y) {
+                                  int16_t y1, int16_t* hit_x, int16_t* hit_y) {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return false;
 
@@ -452,7 +495,6 @@ static void generate_level() {
     draw_houses();
     place_gorillas();
     generate_wind();
-    draw_wind();
     copy_framebuffer_into_level();
 }
 
@@ -538,6 +580,8 @@ void gorillas_render() {
     draw_read_velocity();
     simulate_banana();
     draw_gameover();
+    draw_wind();
+    draw_sun();
 }
 
 void gorillas_handle_key(char read_key) {
