@@ -263,41 +263,6 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
     }
 }
 
-static void generate_houses() {
-    uint16_t x = 0;
-
-    while (x < screen_width) {
-        uint8_t width = random(30, 61);
-        uint8_t height = random(30, 150);
-        // Upper bound is 255 exclusive. 255 is reserved for gorillas
-        uint8_t color = random(210, 255);
-
-        draw_house(x, screen_height - height, width, height, color);
-
-        x += width + 2;
-    }
-}
-
-static void generate_wind() {
-    wind = random(1, 11) - 5;
-
-    if (random(1, 4) == 1) {
-        if (wind > 0) {
-            wind += random(1, 11);
-        } else {
-            wind -= random(1, 11);
-        }
-    }
-}
-
-static void generate_level() {
-    video_out.fillScreen(0);
-    generate_houses();
-    place_gorillas();
-    generate_wind();
-    copy_framebuffer_into_level();
-}
-
 static uint16_t calculate_gorilla_y_position(uint16_t x) {
     uint8_t** framebuffer = video_framebuffer_lines();
 
@@ -352,60 +317,6 @@ static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
     return false;
 }
 
-static void simulate_banana() {
-    if (state != GS_SIMULATE_BANANA) return;
-
-    uint16_t start_x;
-    uint16_t start_y;
-    if (current_player == PLAYER_ONE) {
-        start_x = player_one_pos[0];
-        start_y = player_one_pos[1] - GORILLA_BODY_HEIGHT - 5;
-    } else {
-        start_x = player_two_pos[0] + GORILLA_BODY_WIDTH;
-        start_y = player_two_pos[1] - GORILLA_BODY_HEIGHT - 5;
-    }
-
-    if (millis() - last_simulation_tick > SIMULATION_TICK_SPEED) {
-        last_simulation_tick = millis();
-        simulation_time += 0.1f;
-    }
-
-    int16_t x = calculate_banana_x_position(start_x);
-    int16_t y = calculate_banana_y_position(start_y);
-
-    if (x < 0 || x >= screen_width || y >= screen_height || y < -500) {
-        state = GS_READ_ANGLE;
-        reset_simulation();
-        switch_player();
-        return;
-    }
-
-    if (banana_in_sun(x, y)) {
-        last_sun_mouth_tick = millis();
-    }
-
-    int16_t collision_start_x =
-        has_previous_banana_pos ? previous_banana_pos[0] : x;
-    int16_t collision_start_y =
-        has_previous_banana_pos ? previous_banana_pos[1] : y;
-
-    if (find_banana_collision(collision_start_x, collision_start_y, x, y,
-                              &impact_pos[0], &impact_pos[1])) {
-        state = GS_READ_ANGLE;
-        reset_simulation();
-        switch_player();
-        return;
-    }
-
-    has_previous_banana_pos = true;
-    previous_banana_pos[0] = x;
-    previous_banana_pos[1] = y;
-
-    if (y < 0) return;
-
-    draw_banana(x, y);
-}
-
 static uint16_t adjust_gorilla_x_position(uint16_t x) {
     uint8_t** framebuffer = video_framebuffer_lines();
 
@@ -432,16 +343,6 @@ static uint16_t adjust_gorilla_x_position(uint16_t x) {
     }
 
     return x;
-}
-
-static void place_gorillas() {
-    player_one_pos[0] = random(10, 50);
-    player_one_pos[0] = adjust_gorilla_x_position(player_one_pos[0]);
-    player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
-
-    player_two_pos[0] = random(screen_width - 80, screen_width - 40);
-    player_two_pos[0] = adjust_gorilla_x_position(player_two_pos[0]);
-    player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
 }
 
 static void draw_wind() {
@@ -545,6 +446,105 @@ static void draw_gameover() {
     video_out.setTextSize(2);
     video_out.println("GAME OVER!");
     video_out.setTextSize(1);
+}
+
+static void simulate_banana() {
+    if (state != GS_SIMULATE_BANANA) return;
+
+    uint16_t start_x;
+    uint16_t start_y;
+    if (current_player == PLAYER_ONE) {
+        start_x = player_one_pos[0];
+        start_y = player_one_pos[1] - GORILLA_BODY_HEIGHT - 5;
+    } else {
+        start_x = player_two_pos[0] + GORILLA_BODY_WIDTH;
+        start_y = player_two_pos[1] - GORILLA_BODY_HEIGHT - 5;
+    }
+
+    if (millis() - last_simulation_tick > SIMULATION_TICK_SPEED) {
+        last_simulation_tick = millis();
+        simulation_time += 0.1f;
+    }
+
+    int16_t x = calculate_banana_x_position(start_x);
+    int16_t y = calculate_banana_y_position(start_y);
+
+    if (x < 0 || x >= screen_width || y >= screen_height || y < -500) {
+        state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+        return;
+    }
+
+    if (banana_in_sun(x, y)) {
+        last_sun_mouth_tick = millis();
+    }
+
+    int16_t collision_start_x =
+        has_previous_banana_pos ? previous_banana_pos[0] : x;
+    int16_t collision_start_y =
+        has_previous_banana_pos ? previous_banana_pos[1] : y;
+
+    if (find_banana_collision(collision_start_x, collision_start_y, x, y,
+                              &impact_pos[0], &impact_pos[1])) {
+        state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+        return;
+    }
+
+    has_previous_banana_pos = true;
+    previous_banana_pos[0] = x;
+    previous_banana_pos[1] = y;
+
+    if (y < 0) return;
+
+    draw_banana(x, y);
+}
+
+static void generate_houses() {
+    uint16_t x = 0;
+
+    while (x < screen_width) {
+        uint8_t width = random(30, 61);
+        uint8_t height = random(30, 150);
+        // Upper bound is 255 exclusive. 255 is reserved for gorillas
+        uint8_t color = random(210, 255);
+
+        draw_house(x, screen_height - height, width, height, color);
+
+        x += width + 2;
+    }
+}
+
+static void generate_wind() {
+    wind = random(1, 11) - 5;
+
+    if (random(1, 4) == 1) {
+        if (wind > 0) {
+            wind += random(1, 11);
+        } else {
+            wind -= random(1, 11);
+        }
+    }
+}
+
+static void place_gorillas() {
+    player_one_pos[0] = random(10, 50);
+    player_one_pos[0] = adjust_gorilla_x_position(player_one_pos[0]);
+    player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
+
+    player_two_pos[0] = random(screen_width - 80, screen_width - 40);
+    player_two_pos[0] = adjust_gorilla_x_position(player_two_pos[0]);
+    player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
+}
+
+static void generate_level() {
+    video_out.fillScreen(0);
+    generate_houses();
+    place_gorillas();
+    generate_wind();
+    copy_framebuffer_into_level();
 }
 
 void gorillas_enter() {
