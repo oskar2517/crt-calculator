@@ -244,7 +244,7 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
     // Draw windows
     for (uint8_t xx = 3; xx < width - 8; xx += 9) {
         for (uint8_t yy = 3; yy < height - 8; yy += 13) {
-            uint8_t c = random(0, 2) > 1 ? 10 : 0;
+            uint8_t c = random(0, 2) >= 1 ? 10 : 0;
 
             video_out.fillRect(x + xx, y + yy, 5, 10, c);
         }
@@ -300,7 +300,7 @@ static void draw_sun() {
     uint8_t body_y = 30;
 
     draw_bitset(&sun_body_bits, body_x, body_y, SUN_BODY_WIDTH, SUN_BODY_HEIGHT,
-                false, false, 150);
+                false, false, 180);
 
     uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_REG_WIDTH / 2;
     uint8_t mouth_y = body_y + 18;
