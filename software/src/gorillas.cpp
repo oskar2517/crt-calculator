@@ -1,6 +1,7 @@
 #include <bitset>
+#include <random>
 
-#include "video.h"
+#include "video_framebuffer.h"
 
 #define GORILLA_BODY_WIDTH 19
 #define GORILLA_BODY_HEIGHT 29
@@ -20,6 +21,13 @@ const std::bitset<551> body_bits(
     "11111111000111111111111111100000000111111000000000000111111110000000000011"
     "11111100000000001100100111000000000111111111100000000011000000110000000000"
     "111111110000000000011111111000000");
+
+std::mt19937 rng;
+uint32_t seed;
+
+int32_t seeded_random(int32_t min, int32_t max) {
+    return std::uniform_int_distribution<int32_t>(min, max)(rng);
+}
 
 template <std::size_t N>
 void draw_bitset(const std::bitset<N>* data, int16_t x, int16_t y,
@@ -51,11 +59,58 @@ void draw_gorilla(int16_t x, int16_t y, bool left_arm_up, bool right_arm_up) {
                 GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, true, right_arm_up);
 }
 
-void gorillas_enter() {}
+// TODO: lit and unlit windows
+void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
+                uint8_t color) {
+    video_out.fillRect(x, y, width, height, color);
+
+    // Draw windows
+    for (uint8_t xx = 3; xx < width - 8; xx += 9) {
+        for (uint8_t yy = 3; yy < height - 8; yy += 13) {
+            uint8_t c = seeded_random(0, 2) > 1 ? 10 : 0;
+
+            video_out.fillRect(x + xx, y + yy, 5, 10, c);
+        }
+    }
+}
+
+void draw_houses() {
+    uint16_t x = 0;
+
+    while (x < video_out.width()) {
+        uint8_t width = seeded_random(30, 61);
+        uint8_t height = seeded_random(40, 150);
+        uint8_t color = seeded_random(180, 256);
+
+        draw_house(x, video_out.height() - height, width, height, color);
+
+        x += width + 2;
+    }
+}
+
+void place_gorilla(int16_t x) {
+    int16_t y = 0;
+    
+    uint8_t** framebuffer = video_framebuffer_lines();
+    while (framebuffer[y][x + GORILLA_BODY_WIDTH / 2] == 0) {
+        y++;
+    }
+
+    draw_gorilla(x, y - GORILLA_BODY_HEIGHT, false, false);
+}
+
+void place_gorillas() {
+    place_gorilla(10);
+    place_gorilla(video_out.width() - 40);
+}
+
+void gorillas_enter() { seed = std::random_device{}(); }
 
 void gorillas_exit() {}
 
 void gorillas_render() {
+    rng.seed(seed);
+
     video_out.waitForFrame();
     video_out.fillScreen(0);
 
@@ -69,7 +124,10 @@ void gorillas_render() {
         right_arm_up ^= 1;
     }
 
-    draw_gorilla(30, 30, left_arm_up, right_arm_up);
+    // draw_gorilla(30, 30, left_arm_up, right_arm_up);
+
+    draw_houses();
+    place_gorillas();
 }
 
 void gorillas_handle_key(char read_key) {}
