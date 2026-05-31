@@ -28,6 +28,8 @@
 #define GORILLA_CENTER_Y(y) ((y) - GORILLA_BODY_HEIGHT / 2)
 
 #define GORILLA_ARM_OFFSET(up) ((up) ? -1 : 9)
+#define GORILLA_LEFT_OVERHANG 4
+#define GORILLA_RIGHT_OVERHANG (GORILLA_ARM_WIDTH - 3)
 
 typedef enum {
     GS_SIMULATE_BANANA,
@@ -352,11 +354,41 @@ static uint16_t calculate_gorilla_y_position(uint16_t x) {
     return screen_height;
 }
 
+static uint16_t adjust_gorilla_x_position(uint16_t x) {
+    uint8_t** framebuffer = video_framebuffer_lines();
+
+    uint16_t min_x = GORILLA_LEFT_OVERHANG;
+    uint16_t max_x = screen_width - GORILLA_BODY_WIDTH - GORILLA_RIGHT_OVERHANG;
+    
+    if (x < min_x) x = min_x;
+    if (x > max_x) x = max_x;
+
+    for (uint16_t test_x = x; test_x <= max_x; test_x++) {
+        uint16_t y = calculate_gorilla_y_position(test_x);
+        if (y >= screen_height) continue;
+
+        bool supported = true;
+        for (int16_t xx = -GORILLA_LEFT_OVERHANG;
+             xx < GORILLA_BODY_WIDTH + GORILLA_RIGHT_OVERHANG; xx++) {
+            if (framebuffer[y][test_x + xx] == 0) {
+                supported = false;
+                break;
+            }
+        }
+
+        if (supported) return test_x;
+    }
+
+    return x;
+}
+
 static void place_gorillas() {
     player_one_pos[0] = random(10, 50);
+    player_one_pos[0] = adjust_gorilla_x_position(player_one_pos[0]);
     player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
 
     player_two_pos[0] = random(screen_width - 80, screen_width - 40);
+    player_two_pos[0] = adjust_gorilla_x_position(player_two_pos[0]);
     player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
 }
 
