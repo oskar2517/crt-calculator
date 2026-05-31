@@ -474,7 +474,7 @@ static void simulate_banana() {
         start_x = player_one_pos[0];
         start_y = player_one_pos[1] - GORILLA_BODY_HEIGHT - 5;
     } else {
-        start_x = player_two_pos[0];
+        start_x = player_two_pos[0] + GORILLA_BODY_WIDTH;
         start_y = player_two_pos[1] - GORILLA_BODY_HEIGHT - 5;
     }
 
