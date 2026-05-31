@@ -664,5 +664,9 @@ void gorillas_handle_key(char read_key) {
         }
 
         input = 0;
+    } else if (read_key == '(') {
+        reset_game();
+        generate_level();
+        return;
     }
 }
