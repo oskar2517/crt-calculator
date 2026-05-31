@@ -236,17 +236,16 @@ static void draw_gorilla(int16_t x, int16_t y, bool left_arm_up,
                 true, right_arm_up, 0xFF);
 }
 
-// TODO: lit and unlit windows
 static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
                        uint8_t color) {
     video_out.fillRect(x, y, width, height, color);
 
     // Draw windows
-    for (uint8_t xx = 3; xx < width - 8; xx += 9) {
-        for (uint8_t yy = 3; yy < height - 8; yy += 13) {
-            uint8_t c = random(0, 2) >= 1 ? 10 : 0;
+    for (uint8_t xx = 3; xx <= width - 5; xx += 8) {
+        for (uint8_t yy = 3; yy <= height - 11; yy += 15) {
+            uint8_t c = random(0, 3) >= 1 ? 10 : 0;
 
-            video_out.fillRect(x + xx, y + yy, 5, 10, c);
+            video_out.fillRect(x + xx, y + yy, 4, 10, c);
         }
     }
 }
@@ -258,7 +257,7 @@ static void draw_houses() {
         uint8_t width = random(30, 61);
         uint8_t height = random(30, 150);
         // Upper bound is 255 exclusive. 255 is reserved for gorillas
-        uint8_t color = random(200, 255);
+        uint8_t color = random(210, 255);
 
         draw_house(x, screen_height - height, width, height, color);
 
