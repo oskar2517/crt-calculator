@@ -17,6 +17,11 @@
 #define SUN_BODY_HEIGHT 30
 #define SUN_MOUTH_REG_WIDTH 15
 #define SUN_MOUTH_REG_HEIGHT 4
+#define SUN_MOUTH_OPEN_WIDTH 7
+#define SUN_MOUTH_OPEN_HEIGHT 5
+
+#define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
+#define SUN_Y 30
 
 #define TEXT_Y_START 25
 
@@ -75,6 +80,8 @@ const std::bitset<1230> sun_body_bits(
     "0000000000000000000000000100000000000000000000");
 const std::bitset<60> sun_mouth_regular_bits(
     "000001111100000000110000011000011000000000110100000000000001");
+const std::bitset<35> sun_mouth_open_bits(
+    "00111001111111111111111111110011100");
 
 static uint8_t* level_data = NULL;
 static int16_t angle;
@@ -87,6 +94,7 @@ static bool player_one_arms[2];
 static bool player_two_arms[2];
 static uint32_t last_toss_animation_tick;
 static uint32_t last_win_animation_tick;
+static uint32_t last_sun_mouth_tick;
 static bool player_one_alive;
 static bool player_two_alive;
 static int16_t wind;
@@ -136,6 +144,7 @@ static void reset_game() {
     wind = 0;
     last_toss_animation_tick = 0;
     last_win_animation_tick = 0;
+    last_sun_mouth_tick = 0;
     reset_simulation();
     reset_impact();
 
@@ -164,6 +173,11 @@ static void copy_level_into_framebuffer() {
         std::memcpy(framebuffer[y], level_data + (uint32_t)y * screen_width,
                     screen_width);
     }
+}
+
+static bool banana_in_sun(int16_t x, int16_t y) {
+    return x >= SUN_X && x < SUN_X + SUN_BODY_WIDTH && y >= SUN_Y &&
+           y < SUN_Y + SUN_BODY_HEIGHT;
 }
 
 static int16_t calculate_banana_y_position(uint16_t start_y) {
@@ -297,17 +311,23 @@ static void draw_wind() {
 static void draw_sun() {
     if (state == GS_GAMEOVER) return;
 
-    uint16_t body_x = screen_width / 2 - SUN_BODY_WIDTH / 2;
-    uint8_t body_y = 30;
-
-    draw_bitset(&sun_body_bits, body_x, body_y, SUN_BODY_WIDTH, SUN_BODY_HEIGHT,
+    draw_bitset(&sun_body_bits, SUN_X, SUN_Y, SUN_BODY_WIDTH, SUN_BODY_HEIGHT,
                 false, false, 180);
 
-    uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_REG_WIDTH / 2;
-    uint8_t mouth_y = body_y + 18;
+    uint8_t mouth_y = SUN_Y + 18;
 
-    draw_bitset(&sun_mouth_regular_bits, mouth_x, mouth_y, SUN_MOUTH_REG_WIDTH,
-                SUN_MOUTH_REG_HEIGHT, false, false, 0);
+    if (millis() - last_sun_mouth_tick < 1000) {
+        uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_OPEN_WIDTH / 2;
+
+        draw_bitset(&sun_mouth_open_bits, mouth_x, mouth_y,
+                    SUN_MOUTH_OPEN_WIDTH, SUN_MOUTH_OPEN_HEIGHT, false, false,
+                    0);
+    } else {
+        uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_REG_WIDTH / 2;
+
+        draw_bitset(&sun_mouth_regular_bits, mouth_x, mouth_y,
+                    SUN_MOUTH_REG_WIDTH, SUN_MOUTH_REG_HEIGHT, false, false, 0);
+    }
 }
 
 static void draw_read_angle() {
@@ -491,6 +511,10 @@ static void simulate_banana() {
         reset_simulation();
         switch_player();
         return;
+    }
+
+    if (banana_in_sun(x, y)) {
+        last_sun_mouth_tick = millis();
     }
 
     int16_t collision_start_x =
