@@ -360,7 +360,7 @@ static uint16_t adjust_gorilla_x_position(uint16_t x) {
 
     uint16_t min_x = GORILLA_LEFT_OVERHANG;
     uint16_t max_x = screen_width - GORILLA_BODY_WIDTH - GORILLA_RIGHT_OVERHANG;
-    
+
     if (x < min_x) x = min_x;
     if (x > max_x) x = max_x;
 
@@ -493,9 +493,13 @@ static void simulate_banana() {
         return;
     }
 
-    if (has_previous_banana_pos &&
-        find_banana_collision(previous_banana_pos[0], previous_banana_pos[1], x,
-                              y, &impact_pos[0], &impact_pos[1])) {
+    int16_t collision_start_x =
+        has_previous_banana_pos ? previous_banana_pos[0] : x;
+    int16_t collision_start_y =
+        has_previous_banana_pos ? previous_banana_pos[1] : y;
+
+    if (find_banana_collision(collision_start_x, collision_start_y, x, y,
+                              &impact_pos[0], &impact_pos[1])) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
@@ -507,18 +511,6 @@ static void simulate_banana() {
     previous_banana_pos[1] = y;
 
     if (y < 0) return;
-
-    int16_t hit_x;
-    int16_t hit_y;
-    if (find_banana_collision(x, y, x, y, &hit_x, &hit_y)) {
-        impact_pos[0] = hit_x;
-        impact_pos[1] = hit_y;
-
-        state = GS_READ_ANGLE;
-        reset_simulation();
-        switch_player();
-        return;
-    }
 
     draw_banana(x, y);
 }
