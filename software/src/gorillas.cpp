@@ -61,6 +61,7 @@ static uint32_t last_toss_animation_tick;
 static uint32_t last_win_animation_tick;
 static bool player_one_alive;
 static bool player_two_alive;
+static int16_t wind;
 
 static uint16_t input;
 static float simulation_time;
@@ -104,6 +105,7 @@ static void reset_game() {
     player_two_arms[1] = false;
     player_one_alive = true;
     player_two_alive = true;
+    wind = 0;
     last_toss_animation_tick = 0;
     last_win_animation_tick = 0;
     reset_simulation();
@@ -149,7 +151,9 @@ static int16_t calculate_banana_x_position(uint16_t start_x) {
     float initial_x_velocity = std::cos(angle_radians) * velocity;
     if (current_player == PLAYER_TWO) initial_x_velocity *= -1.0f;
 
-    return (int16_t)(start_x + initial_x_velocity * simulation_time);
+    return (int16_t)(start_x + initial_x_velocity * simulation_time +
+                     0.5f * ((float)wind / 5.0f) * simulation_time *
+                         simulation_time);
 }
 
 template <std::size_t N>
@@ -229,6 +233,35 @@ static void draw_houses() {
 
         x += width + 2;
     }
+}
+
+static void generate_wind() {
+    wind = random(1, 11) - 5;
+
+    if (random(1, 4) == 1) {
+        if (wind > 0) {
+            wind += random(1, 11);
+        } else {
+            wind -= random(1, 11);
+        }
+    }
+}
+
+static void draw_wind() {
+    if (wind == 0) return;
+
+    int16_t center_x = screen_width / 2;
+    int16_t y = TEXT_Y_START;
+    int16_t wind_line = (int32_t)wind * 3 * screen_width / 320;
+
+    if (wind_line == 0) wind_line = wind > 0 ? 1 : -1;
+
+    int16_t end_x = center_x + wind_line;
+    int16_t arrow_dir = wind > 0 ? -2 : 2;
+
+    video_out.drawLine(center_x, y, end_x, y, 0xFF);
+    video_out.drawLine(end_x, y, end_x + arrow_dir, y - 2, 0xFF);
+    video_out.drawLine(end_x, y, end_x + arrow_dir, y + 2, 0xFF);
 }
 
 static void draw_read_angle() {
@@ -418,6 +451,8 @@ static void generate_level() {
     video_out.fillScreen(0);
     draw_houses();
     place_gorillas();
+    generate_wind();
+    draw_wind();
     copy_framebuffer_into_level();
 }
 
