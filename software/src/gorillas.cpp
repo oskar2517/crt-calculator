@@ -14,7 +14,6 @@
 #define BANANA_WIDTH 4
 #define BANANA_HEIGHT 7
 
-#define MAX_INPUT_SIZE 5
 #define TEXT_Y_START 15
 
 #define SIMULATION_TICK_SPEED 20
@@ -230,15 +229,33 @@ static void draw_read_velocity() {
     }
 }
 
-static uint16_t calculate_gorilla_y_position(int16_t x) {
-    uint16_t y = 0;
-
+static uint16_t calculate_gorilla_y_position(uint16_t x) {
+    uint16_t screen_width = video_out.width();
+    uint16_t screen_height = video_out.height();
     uint8_t** framebuffer = video_framebuffer_lines();
-    while (framebuffer[y][x + GORILLA_BODY_WIDTH / 2] == 0) {
-        y++;
+
+    if (framebuffer == NULL) return screen_height;
+    if (screen_width <= GORILLA_BODY_WIDTH) return screen_height;
+
+    uint16_t max_x = screen_width - GORILLA_BODY_WIDTH;
+    if (x > max_x) return screen_height;
+
+    int16_t center_x = x + GORILLA_BODY_WIDTH / 2;
+    int16_t sample_offsets[] = {0, 2, -2, 4, -4, 6, -6};
+
+    for (uint8_t i = 0; i < 7; i++) {
+        int16_t sample_x = center_x + sample_offsets[i];
+        if (sample_x < 0 || sample_x >= screen_width) continue;
+
+        uint16_t y = 0;
+        while (y < screen_height && framebuffer[y][sample_x] == 0) {
+            y++;
+        }
+
+        if (y < screen_height) return y;
     }
 
-    return y;
+    return screen_height;
 }
 
 static void place_gorillas() {
@@ -247,7 +264,7 @@ static void place_gorillas() {
     player_one_pos[0] = random(10, 50);
     player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
 
-    player_two_pos[0] = random(width - 40, width - 80);
+    player_two_pos[0] = random(width - 80, width - 40);
     player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
 
     draw_gorilla(player_one_pos[0], player_one_pos[1] - GORILLA_BODY_HEIGHT,
@@ -324,12 +341,14 @@ static void simulate_banana() {
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
-    if (x < 0 || x >= video_out.width() || y >= video_out.height()) {
+    if (x < 0 || x >= video_out.width()) {
         state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
         return;
     }
+
+    if (y < 0 || y >= video_out.height()) return;
 
     uint8_t** framebuffer = video_framebuffer_lines();
 
