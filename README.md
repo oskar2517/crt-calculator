@@ -38,6 +38,8 @@ The software is written in C(++) and is currently still fairly basic. It is capa
 
 ![Bad Apple](/assets/4.JPG)
 
+![Gorillas](/assets/gorillas.jpg)
+
 ### Videos
 
 https://github.com/user-attachments/assets/d78290b7-812c-4778-8edb-842524321b57
