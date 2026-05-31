@@ -66,6 +66,8 @@ static uint16_t input;
 static float simulation_time;
 static uint32_t last_simulation_tick;
 static int16_t impact_pos[2];
+static int16_t previous_banana_pos[2];
+static bool has_previous_banana_pos;
 
 static bool allocate_level_data() {
     uint16_t width = video_out.width();
@@ -79,6 +81,7 @@ static bool allocate_level_data() {
 static void reset_simulation() {
     simulation_time = 0;
     last_simulation_tick = 0;
+    has_previous_banana_pos = false;
 }
 
 static void reset_impact() {
@@ -340,6 +343,37 @@ static void draw_banana(int16_t x, int16_t y) {
     video_out.setRotation(0);
 }
 
+static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
+                                  int16_t y1, int16_t* hit_x,
+                                  int16_t* hit_y) {
+    uint8_t** framebuffer = video_framebuffer_lines();
+    if (framebuffer == NULL) return false;
+
+    int16_t dx = abs(x1 - x0);
+    int16_t dy = abs(y1 - y0);
+    int16_t steps = dx > dy ? dx : dy;
+    if (steps == 0) steps = 1;
+
+    int16_t screen_width = video_out.width();
+    int16_t screen_height = video_out.height();
+
+    for (int16_t i = 0; i <= steps; i++) {
+        int16_t x = x0 + (int32_t)(x1 - x0) * i / steps;
+        int16_t y = y0 + (int32_t)(y1 - y0) * i / steps;
+
+        if (x < 0 || x >= screen_width) continue;
+        if (y < 0 || y >= screen_height) continue;
+
+        if (framebuffer[y][x] != 0) {
+            *hit_x = x;
+            *hit_y = y;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void simulate_banana() {
     if (state != GS_SIMULATE_BANANA) return;
 
@@ -368,13 +402,26 @@ static void simulate_banana() {
         return;
     }
 
+    if (has_previous_banana_pos &&
+        find_banana_collision(previous_banana_pos[0], previous_banana_pos[1], x,
+                              y, &impact_pos[0], &impact_pos[1])) {
+        state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+        return;
+    }
+
+    has_previous_banana_pos = true;
+    previous_banana_pos[0] = x;
+    previous_banana_pos[1] = y;
+
     if (y < 0) return;
 
-    uint8_t** framebuffer = video_framebuffer_lines();
-
-    if (framebuffer[y][x] != 0) {
-        impact_pos[0] = x;
-        impact_pos[1] = y;
+    int16_t hit_x;
+    int16_t hit_y;
+    if (find_banana_collision(x, y, x, y, &hit_x, &hit_y)) {
+        impact_pos[0] = hit_x;
+        impact_pos[1] = hit_y;
 
         state = GS_READ_ANGLE;
         reset_simulation();
