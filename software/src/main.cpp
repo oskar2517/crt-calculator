@@ -4,6 +4,7 @@
 
 #include "bad_apple.h"
 #include "calculator.h"
+#include "gorillas.h"
 #include "invaders.h"
 #include "keypad.h"
 #include "snake.h"
@@ -25,6 +26,7 @@ static AppMode app_modes[] = {
     {calculator_enter, calculator_exit, calculator_render,
      calculator_handle_key},
     {snake_enter, snake_exit, snake_render, snake_handle_key},
+    {gorillas_enter, gorillas_exit, gorillas_render, gorillas_handle_key},
     {invaders_enter, invaders_exit, invaders_render, invaders_handle_key},
     {bad_apple_enter, bad_apple_exit, bad_apple_render, bad_apple_handle_key},
 };
