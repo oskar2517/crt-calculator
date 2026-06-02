@@ -19,12 +19,15 @@
 #define SUN_MOUTH_OPEN_WIDTH 7
 #define SUN_MOUTH_OPEN_HEIGHT 5
 
+#define RGB332(red, green, blue) \
+    ((((red)&0x07) << 5) | (((green)&0x07) << 2) | ((blue)&0x03))
+
 #define GORILLA_COLOR 255
 #define BANANA_COLOR 253
 #define SUN_COLOR 180
 #define HUD_COLOR 254
 #define SKY_COLOR 0
-#define LIT_WINDOW_COLOR 10
+#define LIT_WINDOW_COLOR RGB332(0, 1, 3)
 
 #define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
 #define SUN_Y 30
@@ -232,6 +235,18 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
             video_out.fillRect(x + xx, y + yy, 4, 10, c);
         }
     }
+}
+
+static uint8_t generate_house_color() {
+    static const uint8_t house_colors[] = {
+        RGB332(2, 3, 1), RGB332(3, 3, 2), RGB332(3, 4, 1),
+        RGB332(4, 3, 2), RGB332(4, 5, 1), RGB332(5, 4, 2),
+        RGB332(5, 6, 1), RGB332(6, 5, 2), RGB332(6, 7, 1),
+        RGB332(7, 6, 0), RGB332(7, 7, 0),
+    };
+
+    return house_colors[random(0, sizeof(house_colors) /
+                                      sizeof(house_colors[0]))];
 }
 
 static uint16_t calculate_gorilla_y_position(uint16_t x) {
@@ -532,9 +547,7 @@ static void generate_houses() {
     while (x < screen_width) {
         uint8_t width = random(30, 61);
         uint8_t height = random(30, 150);
-        // Upper bound is 253 exclusive. 255 is reserved for gorillas, 254 for
-        // wind, 253 for bananas
-        uint8_t color = random(220, BANANA_COLOR);
+        uint8_t color = generate_house_color();
 
         draw_house(x, screen_height - height, width, height, color);
 
