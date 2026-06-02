@@ -534,7 +534,7 @@ static void generate_houses() {
         uint8_t height = random(30, 150);
         // Upper bound is 253 exclusive. 255 is reserved for gorillas, 254 for
         // wind, 253 for bananas
-        uint8_t color = random(210, BANANA_COLOR);
+        uint8_t color = random(220, BANANA_COLOR);
 
         draw_house(x, screen_height - height, width, height, color);
 
