@@ -2,7 +2,6 @@
 
 #include <bitset>
 #include <cmath>
-#include <cstring>
 #include <random>
 
 #include "video_framebuffer.h"
@@ -19,6 +18,13 @@
 #define SUN_MOUTH_REG_HEIGHT 4
 #define SUN_MOUTH_OPEN_WIDTH 7
 #define SUN_MOUTH_OPEN_HEIGHT 5
+
+#define GORILLA_COLOR 255
+#define BANANA_COLOR 253
+#define SUN_COLOR 180
+#define HUD_COLOR 254
+#define SKY_COLOR 0
+#define LIT_WINDOW_COLOR 10
 
 #define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
 #define SUN_Y 30
@@ -44,6 +50,39 @@ typedef enum {
 } GameState;
 
 typedef enum { PLAYER_ONE, PLAYER_TWO } Player;
+
+typedef struct {
+    uint16_t pos[2];
+    bool arms[2];
+    bool alive;
+} PlayerState;
+
+typedef struct {
+    uint32_t last_tick;
+    float time;
+    int16_t previous_pos[2];
+    bool has_previous_pos;
+    uint8_t drawn_rotation;
+} BananaState;
+
+typedef struct {
+    uint32_t last_toss_tick;
+    uint32_t last_win_tick;
+    uint32_t last_sun_mouth_tick;
+} AnimationState;
+
+typedef struct {
+    int16_t angle;
+    int16_t velocity;
+    Player current_player;
+    int16_t wind;
+    GameState state;
+    uint16_t input;
+} RoundState;
+
+typedef struct {
+    bool previous_copy_after_swap;
+} ModeState;
 
 const std::bitset<88> gorilla_arm_bits(
     "11111000011111000011111000111110000111110001111100011111001111100011111000"
@@ -83,128 +122,60 @@ const std::bitset<60> sun_mouth_regular_bits(
 const std::bitset<35> sun_mouth_open_bits(
     "00111001111111111111111111110011100");
 
-static uint8_t* level_data = NULL;
-static int16_t angle;
-static int16_t velocity;
-static Player current_player;
-static GameState state;
-static uint16_t player_one_pos[2];
-static uint16_t player_two_pos[2];
-static bool player_one_arms[2];
-static bool player_two_arms[2];
-static uint32_t last_toss_animation_tick;
-static uint32_t last_win_animation_tick;
-static uint32_t last_sun_mouth_tick;
-static bool player_one_alive;
-static bool player_two_alive;
-static int16_t wind;
-
-static uint16_t input;
-static float simulation_time;
-static uint32_t last_simulation_tick;
-static int16_t impact_pos[2];
-static int16_t previous_banana_pos[2];
-static bool has_previous_banana_pos;
-
-static bool allocate_level_data() {
-    level_data = (uint8_t*)malloc((uint32_t)screen_width * screen_height);
-
-    return level_data != NULL;
-}
-
-static void copy_framebuffer_into_level() {
-    if (level_data == NULL) return;
-
-    uint8_t** framebuffer = video_framebuffer_lines();
-    if (framebuffer == NULL) return;
-
-    for (uint16_t y = 0; y < screen_height; y++) {
-        std::memcpy(level_data + (uint32_t)y * screen_width, framebuffer[y],
-                    screen_width);
-    }
-}
-
-static void copy_level_into_framebuffer() {
-    if (level_data == NULL) return;
-
-    uint8_t** framebuffer = video_framebuffer_lines();
-    if (framebuffer == NULL) return;
-
-    for (uint16_t y = 0; y < screen_height; y++) {
-        std::memcpy(framebuffer[y], level_data + (uint32_t)y * screen_width,
-                    screen_width);
-    }
-}
-
-static void free_level() {
-    if (level_data == NULL) return;
-    free(level_data);
-    level_data = NULL;
-}
+static PlayerState player_one;
+static PlayerState player_two;
+static BananaState banana;
+static AnimationState animations;
+static RoundState game;
+static ModeState mode;
 
 static void reset_simulation() {
-    simulation_time = 0;
-    last_simulation_tick = 0;
-    has_previous_banana_pos = false;
-}
-
-static void reset_impact() {
-    impact_pos[0] = -1;
-    impact_pos[1] = -1;
+    banana.time = 0;
+    banana.last_tick = 0;
+    banana.has_previous_pos = false;
 }
 
 static void reset_game() {
-    free_level();
-
-    current_player = PLAYER_ONE;
-    state = GS_READ_ANGLE;
-    input = 0;
-    player_one_arms[0] = false;
-    player_one_arms[1] = false;
-    player_two_arms[0] = false;
-    player_two_arms[1] = false;
-    player_one_alive = true;
-    player_two_alive = true;
-    wind = 0;
-    last_toss_animation_tick = 0;
-    last_win_animation_tick = 0;
-    last_sun_mouth_tick = 0;
+    game.current_player = PLAYER_ONE;
+    game.state = GS_READ_ANGLE;
+    game.input = 0;
+    player_one.arms[0] = false;
+    player_one.arms[1] = false;
+    player_two.arms[0] = false;
+    player_two.arms[1] = false;
+    player_one.alive = true;
+    player_two.alive = true;
+    game.wind = 0;
+    animations.last_toss_tick = 0;
+    animations.last_win_tick = 0;
+    animations.last_sun_mouth_tick = 0;
     reset_simulation();
-    reset_impact();
-
-    allocate_level_data();
 }
 
 static void switch_player() {
-    if (current_player == PLAYER_ONE) {
-        current_player = PLAYER_TWO;
+    if (game.current_player == PLAYER_ONE) {
+        game.current_player = PLAYER_TWO;
     } else {
-        current_player = PLAYER_ONE;
+        game.current_player = PLAYER_ONE;
     }
 }
 
-static bool banana_in_sun(int16_t x, int16_t y) {
-    return x >= SUN_X && x < SUN_X + SUN_BODY_WIDTH && y >= SUN_Y &&
-           y < SUN_Y + SUN_BODY_HEIGHT;
-}
-
 static int16_t calculate_banana_y_position(uint16_t start_y) {
-    float angle_radians = (float)angle / 180.0f * PI_F;
-    float initial_y_velocity = std::sin(angle_radians) * (float)velocity;
+    float angle_radians = (float)game.angle / 180.0f * PI_F;
+    float initial_y_velocity = std::sin(angle_radians) * (float)game.velocity;
 
-    return (int16_t)(start_y + (-1.0f * initial_y_velocity * simulation_time) +
-                     (0.5f * SIMULATION_GRAVITY * simulation_time *
-                      simulation_time));
+    return (int16_t)(start_y + (-1.0f * initial_y_velocity * banana.time) +
+                     (0.5f * SIMULATION_GRAVITY * banana.time * banana.time));
 }
 
 static int16_t calculate_banana_x_position(uint16_t start_x) {
-    float angle_radians = angle / 180.0f * PI_F;
-    float initial_x_velocity = std::cos(angle_radians) * velocity;
-    if (current_player == PLAYER_TWO) initial_x_velocity *= -1.0f;
+    float angle_radians = game.angle / 180.0f * PI_F;
+    float initial_x_velocity = std::cos(angle_radians) * game.velocity;
+    if (game.current_player == PLAYER_TWO) initial_x_velocity *= -1.0f;
 
-    return (int16_t)(start_x + initial_x_velocity * simulation_time +
-                     0.5f * ((float)wind / 5.0f) * simulation_time *
-                         simulation_time);
+    return (int16_t)(start_x + initial_x_velocity * banana.time +
+                     0.5f * ((float)game.wind / 5.0f) * banana.time *
+                         banana.time);
 }
 
 template <std::size_t N>
@@ -238,15 +209,15 @@ static void draw_gorilla(int16_t x, int16_t y, bool left_arm_up,
                 GORILLA_ARM_HEIGHT, true, !right_arm_up, 0);
 
     draw_bitset(&gorilla_body_bits, x, y, GORILLA_BODY_WIDTH,
-                GORILLA_BODY_HEIGHT, false, false, 0xFF);
+                GORILLA_BODY_HEIGHT, false, false, GORILLA_COLOR);
 
     draw_bitset(&gorilla_arm_bits, x - 4, y + left_arm_offset,
                 GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT, false, left_arm_up,
-                0xFF);
+                GORILLA_COLOR);
 
     draw_bitset(&gorilla_arm_bits, x + GORILLA_BODY_WIDTH - 3,
                 y + right_arm_offset, GORILLA_ARM_WIDTH, GORILLA_ARM_HEIGHT,
-                true, right_arm_up, 0xFF);
+                true, right_arm_up, GORILLA_COLOR);
 }
 
 static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
@@ -256,7 +227,7 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
     // Draw windows
     for (uint8_t xx = 3; xx <= width - 5; xx += 8) {
         for (uint8_t yy = 3; yy <= height - 11; yy += 15) {
-            uint8_t c = random(0, 3) >= 1 ? 10 : 0;
+            uint8_t c = random(0, 3) >= 1 ? LIT_WINDOW_COLOR : SKY_COLOR;
 
             video_out.fillRect(x + xx, y + yy, 4, 10, c);
         }
@@ -291,7 +262,8 @@ static uint16_t calculate_gorilla_y_position(uint16_t x) {
 }
 
 static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
-                                  int16_t y1, int16_t* hit_x, int16_t* hit_y) {
+                                  int16_t y1, int16_t* hit_x, int16_t* hit_y,
+                                  bool* hit_sun) {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return false;
 
@@ -307,11 +279,18 @@ static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
         if (x < 0 || x >= screen_width) continue;
         if (y < 0 || y >= screen_height) continue;
 
-        if (framebuffer[y][x] != 0) {
-            *hit_x = x;
-            *hit_y = y;
-            return true;
+        uint8_t color = framebuffer[y][x];
+        if (color == 0) continue;
+        if (color == HUD_COLOR) continue;
+
+        if (color == SUN_COLOR) {
+            *hit_sun = true;
+            continue;
         }
+
+        *hit_x = x;
+        *hit_y = y;
+        return true;
     }
 
     return false;
@@ -333,7 +312,7 @@ static uint16_t adjust_gorilla_x_position(uint16_t x) {
         bool supported = true;
         for (int16_t xx = -GORILLA_LEFT_OVERHANG;
              xx < GORILLA_BODY_WIDTH + GORILLA_RIGHT_OVERHANG; xx++) {
-            if (framebuffer[y][test_x + xx] == 0) {
+            if (framebuffer[y][test_x + xx] == SKY_COLOR) {
                 supported = false;
                 break;
             }
@@ -346,65 +325,71 @@ static uint16_t adjust_gorilla_x_position(uint16_t x) {
 }
 
 static void draw_wind() {
-    if (wind == 0) return;
+    if (game.wind == 0) return;
 
     int16_t x = 180;
     int16_t y = TEXT_Y_START;
-    int16_t wind_line = (int32_t)wind * 3 * screen_width / 320;
+    int16_t wind_line = (int32_t)game.wind * 3 * screen_width / 320;
 
-    if (wind_line == 0) wind_line = wind > 0 ? 1 : -1;
+    if (wind_line == 0) wind_line = game.wind > 0 ? 1 : -1;
 
     int16_t end_x = x + wind_line;
-    int16_t arrow_dir = wind > 0 ? -2 : 2;
+    int16_t arrow_dir = game.wind > 0 ? -2 : 2;
 
-    video_out.drawLine(x, y, end_x, y, 0xFF);
-    video_out.drawLine(end_x, y, end_x + arrow_dir, y - 2, 0xFF);
-    video_out.drawLine(end_x, y, end_x + arrow_dir, y + 2, 0xFF);
+    video_out.drawLine(x, y, end_x, y, HUD_COLOR);
+    video_out.drawLine(end_x, y, end_x + arrow_dir, y - 2, HUD_COLOR);
+    video_out.drawLine(end_x, y, end_x + arrow_dir, y + 2, HUD_COLOR);
+}
+
+static void clear_input_area() {
+    video_out.fillRect(0, TEXT_Y_START, SUN_X, 10, SKY_COLOR);
+}
+
+static bool sun_mouth_is_open() {
+    return animations.last_sun_mouth_tick != 0 &&
+           millis() - animations.last_sun_mouth_tick < 1000;
 }
 
 static void draw_sun() {
-    if (state == GS_GAMEOVER) return;
-
     draw_bitset(&sun_body_bits, SUN_X, SUN_Y, SUN_BODY_WIDTH, SUN_BODY_HEIGHT,
-                false, false, 180);
+                false, false, SUN_COLOR);
 
     uint8_t mouth_y = SUN_Y + 18;
 
-    if (millis() - last_sun_mouth_tick < 1000) {
+    if (sun_mouth_is_open()) {
         uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_OPEN_WIDTH / 2;
 
         draw_bitset(&sun_mouth_open_bits, mouth_x, mouth_y,
                     SUN_MOUTH_OPEN_WIDTH, SUN_MOUTH_OPEN_HEIGHT, false, false,
-                    0);
+                    SKY_COLOR);
     } else {
         uint16_t mouth_x = screen_width / 2 - SUN_MOUTH_REG_WIDTH / 2;
 
         draw_bitset(&sun_mouth_regular_bits, mouth_x, mouth_y,
-                    SUN_MOUTH_REG_WIDTH, SUN_MOUTH_REG_HEIGHT, false, false, 0);
+                    SUN_MOUTH_REG_WIDTH, SUN_MOUTH_REG_HEIGHT, false, false,
+                    SKY_COLOR);
     }
 }
 
 static void draw_read_angle() {
-    if (state != GS_READ_ANGLE) return;
+    if (game.state != GS_READ_ANGLE) return;
 
     video_out.print("Angle: ");
-    if (input != 0) {
-        video_out.println(input);
+    if (game.input != 0) {
+        video_out.println(game.input);
     }
 }
 
 static void draw_read_velocity() {
-    if (state != GS_READ_VELOCITY) return;
+    if (game.state != GS_READ_VELOCITY) return;
 
     video_out.print("Velocity: ");
-    if (input != 0) {
-        video_out.println(input);
+    if (game.input != 0) {
+        video_out.println(game.input);
     }
 }
 
-static void draw_banana(int16_t x, int16_t y) {
-    uint8_t rotation = ((uint32_t)(simulation_time * 5)) % 4;
-
+static void draw_banana(int16_t x, int16_t y, uint8_t rotation, uint8_t color) {
     int16_t rotated_width = rotation % 2 == 0 ? BANANA_WIDTH : BANANA_HEIGHT;
     int16_t rotated_height = rotation % 2 == 0 ? BANANA_HEIGHT : BANANA_WIDTH;
 
@@ -435,67 +420,106 @@ static void draw_banana(int16_t x, int16_t y) {
 
     video_out.setRotation(rotation);
     draw_bitset(&banana_bits, render_x, render_y, BANANA_WIDTH, BANANA_HEIGHT,
-                false, false, 0xFF);
+                false, false, color);
     video_out.setRotation(0);
 }
 
-static void draw_gameover() {
-    if (state != GS_GAMEOVER) return;
+static void clear_drawn_banana() {
+    if (!banana.has_previous_pos) return;
 
-    video_out.setCursor(60, 40);
-    video_out.setTextSize(2);
-    video_out.println("GAME OVER!");
-    video_out.setTextSize(1);
+    draw_banana(banana.previous_pos[0], banana.previous_pos[1],
+                banana.drawn_rotation, SKY_COLOR);
+}
+
+static void draw_banana(int16_t x, int16_t y) {
+    uint8_t rotation = ((uint32_t)(banana.time * 5)) % 4;
+
+    draw_banana(x, y, rotation, BANANA_COLOR);
+    banana.drawn_rotation = rotation;
+}
+
+static void do_banana_explosion(int16_t x, int16_t y) {
+    uint8_t** framebuffer = video_framebuffer_lines();
+    if (framebuffer == NULL) return;
+
+    // If gorilla hit
+    if (framebuffer[y][x] == GORILLA_COLOR) {
+        // Decide whether right or left gorilla (player 1 or player 2)
+        if (x > screen_width / 2) {
+            video_out.fillCircle(GORILLA_CENTER_X(player_two.pos[0]),
+                                 GORILLA_CENTER_Y(player_two.pos[1]), 25,
+                                 SKY_COLOR);
+            player_two.alive = false;
+            player_one.arms[0] = true;
+            player_one.arms[1] = false;
+        } else {
+            video_out.fillCircle(GORILLA_CENTER_X(player_one.pos[0]),
+                                 GORILLA_CENTER_Y(player_one.pos[1]), 25,
+                                 SKY_COLOR);
+            player_one.alive = false;
+            player_two.arms[0] = true;
+            player_two.arms[1] = false;
+        }
+
+        game.state = GS_GAMEOVER;
+    } else {
+        video_out.fillCircle(x, y, 5, SKY_COLOR);
+        game.state = GS_READ_ANGLE;
+        reset_simulation();
+        switch_player();
+    }
 }
 
 static void simulate_banana() {
-    if (state != GS_SIMULATE_BANANA) return;
+    if (game.state != GS_SIMULATE_BANANA) return;
 
     uint16_t start_x;
     uint16_t start_y;
-    if (current_player == PLAYER_ONE) {
-        start_x = player_one_pos[0];
-        start_y = player_one_pos[1] - GORILLA_BODY_HEIGHT - 5;
+    if (game.current_player == PLAYER_ONE) {
+        start_x = player_one.pos[0];
+        start_y = player_one.pos[1] - GORILLA_BODY_HEIGHT - 5;
     } else {
-        start_x = player_two_pos[0] + GORILLA_BODY_WIDTH;
-        start_y = player_two_pos[1] - GORILLA_BODY_HEIGHT - 5;
+        start_x = player_two.pos[0] + GORILLA_BODY_WIDTH;
+        start_y = player_two.pos[1] - GORILLA_BODY_HEIGHT - 5;
     }
 
-    if (millis() - last_simulation_tick > SIMULATION_TICK_SPEED) {
-        last_simulation_tick = millis();
-        simulation_time += 0.1f;
+    if (millis() - banana.last_tick > SIMULATION_TICK_SPEED) {
+        banana.last_tick = millis();
+        banana.time += 0.1f;
     }
 
     int16_t x = calculate_banana_x_position(start_x);
     int16_t y = calculate_banana_y_position(start_y);
 
     if (x < 0 || x >= screen_width || y >= screen_height || y < -500) {
-        state = GS_READ_ANGLE;
+        game.state = GS_READ_ANGLE;
         reset_simulation();
         switch_player();
         return;
-    }
-
-    if (banana_in_sun(x, y)) {
-        last_sun_mouth_tick = millis();
     }
 
     int16_t collision_start_x =
-        has_previous_banana_pos ? previous_banana_pos[0] : x;
+        banana.has_previous_pos ? banana.previous_pos[0] : x;
     int16_t collision_start_y =
-        has_previous_banana_pos ? previous_banana_pos[1] : y;
+        banana.has_previous_pos ? banana.previous_pos[1] : y;
+    bool hit_sun = false;
+
+    int16_t impact_x;
+    int16_t impact_y;
 
     if (find_banana_collision(collision_start_x, collision_start_y, x, y,
-                              &impact_pos[0], &impact_pos[1])) {
-        state = GS_READ_ANGLE;
-        reset_simulation();
-        switch_player();
+                              &impact_x, &impact_y, &hit_sun)) {
+        do_banana_explosion(impact_x, impact_y);
         return;
     }
 
-    has_previous_banana_pos = true;
-    previous_banana_pos[0] = x;
-    previous_banana_pos[1] = y;
+    if (hit_sun) {
+        animations.last_sun_mouth_tick = millis();
+    }
+
+    banana.has_previous_pos = true;
+    banana.previous_pos[0] = x;
+    banana.previous_pos[1] = y;
 
     if (y < 0) return;
 
@@ -508,8 +532,9 @@ static void generate_houses() {
     while (x < screen_width) {
         uint8_t width = random(30, 61);
         uint8_t height = random(30, 150);
-        // Upper bound is 255 exclusive. 255 is reserved for gorillas
-        uint8_t color = random(210, 255);
+        // Upper bound is 253 exclusive. 255 is reserved for gorillas, 254 for
+        // wind, 253 for bananas
+        uint8_t color = random(210, BANANA_COLOR);
 
         draw_house(x, screen_height - height, width, height, color);
 
@@ -518,25 +543,25 @@ static void generate_houses() {
 }
 
 static void generate_wind() {
-    wind = random(1, 11) - 5;
+    game.wind = random(1, 11) - 5;
 
     if (random(1, 4) == 1) {
-        if (wind > 0) {
-            wind += random(1, 11);
+        if (game.wind > 0) {
+            game.wind += random(1, 11);
         } else {
-            wind -= random(1, 11);
+            game.wind -= random(1, 11);
         }
     }
 }
 
 static void place_gorillas() {
-    player_one_pos[0] = random(10, 50);
-    player_one_pos[0] = adjust_gorilla_x_position(player_one_pos[0]);
-    player_one_pos[1] = calculate_gorilla_y_position(player_one_pos[0]);
+    player_one.pos[0] = random(10, 50);
+    player_one.pos[0] = adjust_gorilla_x_position(player_one.pos[0]);
+    player_one.pos[1] = calculate_gorilla_y_position(player_one.pos[0]);
 
-    player_two_pos[0] = random(screen_width - 80, screen_width - 40);
-    player_two_pos[0] = adjust_gorilla_x_position(player_two_pos[0]);
-    player_two_pos[1] = calculate_gorilla_y_position(player_two_pos[0]);
+    player_two.pos[0] = random(screen_width - 80, screen_width - 40);
+    player_two.pos[0] = adjust_gorilla_x_position(player_two.pos[0]);
+    player_two.pos[1] = calculate_gorilla_y_position(player_two.pos[0]);
 }
 
 static void generate_level() {
@@ -544,126 +569,94 @@ static void generate_level() {
     generate_houses();
     place_gorillas();
     generate_wind();
-    copy_framebuffer_into_level();
 }
 
 void gorillas_enter() {
+    mode.previous_copy_after_swap = video_out.copyAfterSwap;
+    video_out.copyAfterSwap = true;
     reset_game();
     generate_level();
 }
 
-void gorillas_exit() { free_level(); }
+void gorillas_exit() {
+    video_out.copyAfterSwap = mode.previous_copy_after_swap;
+}
 
 void gorillas_render() {
     video_out.waitForFrame();
-    video_out.fillScreen(0);
     video_out.setTextSize(1);
-    video_out.setTextColor(0xFF);
+    video_out.setTextColor(HUD_COLOR);
 
-    copy_level_into_framebuffer();
+    clear_input_area();
+    clear_drawn_banana();
+    draw_sun();
 
-    if (state != GS_GAMEOVER && last_toss_animation_tick != 0 &&
-        millis() - last_toss_animation_tick > 500) {
-        player_one_arms[0] = false;
-        player_two_arms[1] = false;
+    if (game.state != GS_GAMEOVER && animations.last_toss_tick != 0 &&
+        millis() - animations.last_toss_tick > 500) {
+        player_one.arms[0] = false;
+        player_two.arms[1] = false;
     }
 
-    if (state == GS_GAMEOVER && millis() - last_win_animation_tick > 500) {
-        last_win_animation_tick = millis();
+    if (game.state == GS_GAMEOVER &&
+        millis() - animations.last_win_tick > 500) {
+        animations.last_win_tick = millis();
 
-        player_two_arms[0] = !player_two_arms[0];
-        player_two_arms[1] = !player_two_arms[1];
+        player_two.arms[0] = !player_two.arms[0];
+        player_two.arms[1] = !player_two.arms[1];
 
-        player_one_arms[0] = !player_one_arms[0];
-        player_one_arms[1] = !player_one_arms[1];
+        player_one.arms[0] = !player_one.arms[0];
+        player_one.arms[1] = !player_one.arms[1];
     }
 
-    if (player_one_alive) {
-        draw_gorilla(player_one_pos[0], player_one_pos[1] - GORILLA_BODY_HEIGHT,
-                     player_one_arms[0], player_one_arms[1]);
+    if (player_one.alive) {
+        draw_gorilla(player_one.pos[0], player_one.pos[1] - GORILLA_BODY_HEIGHT,
+                     player_one.arms[0], player_one.arms[1]);
     }
 
-    if (player_two_alive) {
-        draw_gorilla(player_two_pos[0], player_two_pos[1] - GORILLA_BODY_HEIGHT,
-                     player_two_arms[0], player_two_arms[1]);
+    if (player_two.alive) {
+        draw_gorilla(player_two.pos[0], player_two.pos[1] - GORILLA_BODY_HEIGHT,
+                     player_two.arms[0], player_two.arms[1]);
     }
-
-    // Perform explosion
-    if (impact_pos[0] != -1) {
-        uint8_t** framebuffer = video_framebuffer_lines();
-        int16_t x = impact_pos[0];
-        int16_t y = impact_pos[1];
-
-        // If gorilla hit
-        if (framebuffer[y][x] == 0xFF) {
-            // Decide whether right or left gorilla (player 1 or player 2)
-            if (x > screen_width / 2) {
-                video_out.fillCircle(GORILLA_CENTER_X(player_two_pos[0]),
-                                     GORILLA_CENTER_Y(player_two_pos[1]), 25,
-                                     0);
-                player_two_alive = false;
-                player_one_arms[0] = true;
-                player_one_arms[1] = false;
-            } else {
-                video_out.fillCircle(GORILLA_CENTER_X(player_one_pos[0]),
-                                     GORILLA_CENTER_Y(player_one_pos[1]), 25,
-                                     0);
-                player_one_alive = false;
-                player_two_arms[0] = true;
-                player_two_arms[1] = false;
-            }
-
-            state = GS_GAMEOVER;
-        } else {
-            video_out.fillCircle(x, y, 5, 0);
-        }
-
-        impact_pos[0] = -1;
-        impact_pos[1] = -1;
-    }
-
-    copy_framebuffer_into_level();
 
     video_out.setCursor(0, TEXT_Y_START);
     draw_read_angle();
     draw_read_velocity();
     simulate_banana();
-    draw_gameover();
     draw_wind();
     draw_sun();
 }
 
 void gorillas_handle_key(char read_key) {
-    if (state == GS_GAMEOVER) {
+    if (game.state == GS_GAMEOVER) {
         reset_game();
         generate_level();
         return;
     }
 
-    if (state != GS_READ_ANGLE && state != GS_READ_VELOCITY) return;
+    if (game.state != GS_READ_ANGLE && game.state != GS_READ_VELOCITY) return;
 
     if (read_key >= '0' && read_key <= '9') {
-        input *= 10;
-        input += read_key - '0';
+        game.input *= 10;
+        game.input += read_key - '0';
     } else if (read_key == '<') {
-        input /= 10;
+        game.input /= 10;
     } else if (read_key == '=') {
-        if (state == GS_READ_ANGLE) {
-            angle = input;
-            state = GS_READ_VELOCITY;
-        } else if (state == GS_READ_VELOCITY) {
-            velocity = input;
-            state = GS_SIMULATE_BANANA;
+        if (game.state == GS_READ_ANGLE) {
+            game.angle = game.input;
+            game.state = GS_READ_VELOCITY;
+        } else if (game.state == GS_READ_VELOCITY) {
+            game.velocity = game.input;
+            game.state = GS_SIMULATE_BANANA;
 
-            last_toss_animation_tick = millis();
-            if (current_player == PLAYER_ONE) {
-                player_one_arms[0] = true;
+            animations.last_toss_tick = millis();
+            if (game.current_player == PLAYER_ONE) {
+                player_one.arms[0] = true;
             } else {
-                player_two_arms[1] = true;
+                player_two.arms[1] = true;
             }
         }
 
-        input = 0;
+        game.input = 0;
     } else if (read_key == '(') {
         reset_game();
         generate_level();
