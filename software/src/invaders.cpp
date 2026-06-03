@@ -529,8 +529,6 @@ static void update_bullets() {
 }
 
 static void update_player() {
-    keypad.getKeys();
-
     bool move_left = false;
     bool move_right = false;
 

@@ -37,6 +37,16 @@ static uint8_t app_mode_count() {
 
 static AppMode* current_mode() { return &app_modes[current_mode_index]; }
 
+static char read_pressed_key() {
+    for (uint8_t i = 0; i < LIST_MAX; i++) {
+        if (keypad.key[i].stateChanged && keypad.key[i].kstate == PRESSED) {
+            return keypad.key[i].kchar;
+        }
+    }
+
+    return NO_KEY;
+}
+
 static void switch_mode(uint8_t mode_index) {
     current_mode()->exit();
     current_mode_index = mode_index % app_mode_count();
@@ -83,7 +93,8 @@ void loop() {
 
     mode->render();
 
-    char read_key = keypad.getKey();
+    keypad.getKeys();
+    char read_key = read_pressed_key();
 
     if (!read_key) return;
 
