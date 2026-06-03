@@ -13,6 +13,7 @@ static uint8_t buffer[5096];
 static uint32_t buffer_len;
 static uint32_t last_frame_read;
 static uint16_t frame_counter;
+static bool previous_copy_after_swap;
 
 static void read_frame_into_buffer() {
     uint32_t len = 0;
@@ -35,10 +36,14 @@ void bad_apple_enter() {
     file = LittleFS.open("/bad_apple.bin", "r");
     last_frame_read = 0;
     frame_counter = 0;
+
+    previous_copy_after_swap = video_out.copyAfterSwap;
+    video_out.copyAfterSwap = true;
 }
 
 void bad_apple_exit() {
     file.close();
+    video_out.copyAfterSwap = previous_copy_after_swap;
 }
 
 void bad_apple_render() {
@@ -47,10 +52,10 @@ void bad_apple_render() {
     video_out.waitForFrame();
 
     tick += 24;
-    if (tick >= 50) {
-        tick -= 50;
-        read_frame_into_buffer();
-    }
+    if (tick < 50) return;
+    tick -= 50;
+    
+    read_frame_into_buffer();
 
     video_out.fillScreen(0);
 
@@ -68,13 +73,8 @@ void bad_apple_render() {
             d = buffer[i + 3];
         }
 
-        video_out.drawLine(
-            OFFSET_X(a),
-            OFFSET_Y(b),
-            OFFSET_X(c),
-            OFFSET_Y(d),
-            0xFF
-        );
+        video_out.drawLine(OFFSET_X(a), OFFSET_Y(b), OFFSET_X(c), OFFSET_Y(d),
+                           0xFF);
     }
 }
 
