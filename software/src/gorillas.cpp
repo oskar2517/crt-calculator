@@ -27,6 +27,7 @@
 #define SUN_COLOR 180
 #define HUD_COLOR 254
 #define SKY_COLOR 0
+#define EXPLOSION_COLOR RGB332(7, 1, 0)
 #define LIT_WINDOW_COLOR RGB332(0, 1, 3)
 
 #define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
@@ -37,10 +38,10 @@
 #define SIMULATION_TICK_SPEED 20
 #define SIMULATION_TIME_STEP 0.1f
 #define SIMULATION_GRAVITY 9.8f
-#define EXPLOSION_TIME_STEP 0.1f
+#define EXPLOSION_TIME_STEP 0.05f
 #define EXPLOSION_DURATION 1.0f
 #define BUILDING_EXPLOSION_RADIUS 5
-#define GORILLA_EXPLOSION_RADIUS 25
+#define GORILLA_EXPLOSION_RADIUS 30
 #define PI_F 3.14159265358979323846f
 
 #define GORILLA_CENTER_X(x) ((x) + GORILLA_BODY_WIDTH / 2)
@@ -498,6 +499,8 @@ static bool is_gorilla_hit(int16_t x, int16_t y) {
 }
 
 static void set_winner_pose(Player winner) {
+    // Reset toss tick to prevent arm resetting overwriting pose
+    animations.last_toss_tick = 0;
     PlayerState* winner_state = get_player_state(winner);
     winner_state->arms[0] = true;
     winner_state->arms[1] = false;
@@ -506,8 +509,6 @@ static void set_winner_pose(Player winner) {
 static void start_explosion(int16_t x, int16_t y) {
     explosion.active = true;
     explosion.time = 0;
-    explosion.pos[0] = x;
-    explosion.pos[1] = y;
     explosion.hit_gorilla = is_gorilla_hit(x, y);
     explosion.hit_player = player_from_hit_x(x);
     game.state = GS_EXPLODING;
@@ -516,25 +517,30 @@ static void start_explosion(int16_t x, int16_t y) {
         PlayerState* hit_player_state = get_player_state(explosion.hit_player);
         hit_player_state->alive = false;
         set_winner_pose(get_opponent(explosion.hit_player));
+
+        explosion.pos[0] = GORILLA_CENTER_X(hit_player_state->pos[0]);
+        explosion.pos[1] = GORILLA_CENTER_Y(hit_player_state->pos[1]);
+    } else {
+        explosion.pos[0] = x;
+        explosion.pos[1] = y;
     }
 }
 
-static void draw_building_explosion_frame() {
-    int16_t radius =
-        (int16_t)(BUILDING_EXPLOSION_RADIUS * explosion.time);
-    video_out.fillCircle(explosion.pos[0], explosion.pos[1], radius, SKY_COLOR);
-}
-
-static void draw_gorilla_explosion_frame() {
-    PlayerState* hit_player_state = get_player_state(explosion.hit_player);
-    int16_t radius = (int16_t)(GORILLA_EXPLOSION_RADIUS * explosion.time);
-
-    video_out.fillCircle(GORILLA_CENTER_X(hit_player_state->pos[0]),
-                         GORILLA_CENTER_Y(hit_player_state->pos[1]), radius,
+static void draw_explosion_frame(uint8_t final_radius) {
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1], final_radius,
                          SKY_COLOR);
+
+    int16_t radius = (int16_t)(final_radius * (1.0 - explosion.time));
+    uint16_t color = explosion.time < 0.1 ? SKY_COLOR : EXPLOSION_COLOR;
+
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1], radius, color);
 }
 
 static void finish_explosion() {
+    // Overtwrite animation residual artifact
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1],
+                         BUILDING_EXPLOSION_RADIUS, SKY_COLOR);
+
     bool hit_gorilla = explosion.hit_gorilla;
 
     reset_explosion();
@@ -552,9 +558,9 @@ static void update_explosion() {
     if (!explosion.active) return;
 
     if (explosion.hit_gorilla) {
-        draw_gorilla_explosion_frame();
+        draw_explosion_frame(GORILLA_EXPLOSION_RADIUS);
     } else {
-        draw_building_explosion_frame();
+        draw_explosion_frame(BUILDING_EXPLOSION_RADIUS);
     }
 
     explosion.time += EXPLOSION_TIME_STEP;
