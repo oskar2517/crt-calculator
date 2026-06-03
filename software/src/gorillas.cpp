@@ -28,6 +28,7 @@
 #define HUD_COLOR 254
 #define SKY_COLOR 0
 #define EXPLOSION_COLOR RGB332(7, 1, 0)
+#define UNLIT_WINDOW_COLOR RGB332(0, 0, 1)
 #define LIT_WINDOW_COLOR RGB332(0, 1, 3)
 
 #define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
@@ -268,7 +269,7 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
     // Draw windows
     for (uint8_t xx = 3; xx <= width - 5; xx += 8) {
         for (uint8_t yy = 3; yy <= height - 11; yy += 15) {
-            uint8_t c = random(0, 3) >= 1 ? LIT_WINDOW_COLOR : SKY_COLOR;
+            uint8_t c = random(0, 3) >= 1 ? LIT_WINDOW_COLOR : UNLIT_WINDOW_COLOR;
 
             video_out.fillRect(x + xx, y + yy, 4, 10, c);
         }
