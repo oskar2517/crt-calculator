@@ -333,7 +333,7 @@ static bool find_banana_collision(int16_t x0, int16_t y0, int16_t x1,
         if (y < 0 || y >= screen_height) continue;
 
         uint8_t color = framebuffer[y][x];
-        if (color == 0) continue;
+        if (color == SKY_COLOR) continue;
         if (color == HUD_COLOR) continue;
 
         if (color == SUN_COLOR) {
@@ -652,6 +652,7 @@ static void generate_wind() {
     }
 }
 
+// TODO: Combine adjust_gorilla_x_position and calculate_gorilla_y_position
 static void place_gorillas() {
     player_one.pos[0] = random(10, 50);
     player_one.pos[0] = adjust_gorilla_x_position(player_one.pos[0]);
