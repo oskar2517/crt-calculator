@@ -20,13 +20,14 @@
 #define SUN_MOUTH_OPEN_HEIGHT 5
 
 #define RGB332(red, green, blue) \
-    ((((red)&0x07) << 5) | (((green)&0x07) << 2) | ((blue)&0x03))
+    ((((red) & 0x07) << 5) | (((green) & 0x07) << 2) | ((blue) & 0x03))
 
 #define GORILLA_COLOR 255
 #define BANANA_COLOR 253
 #define SUN_COLOR 180
 #define HUD_COLOR 254
 #define SKY_COLOR 0
+#define EXPLOSION_COLOR RGB332(7, 1, 0)
 #define LIT_WINDOW_COLOR RGB332(0, 1, 3)
 
 #define SUN_X (screen_width / 2 - SUN_BODY_WIDTH / 2)
@@ -35,7 +36,12 @@
 #define TEXT_Y_START 25
 
 #define SIMULATION_TICK_SPEED 20
+#define SIMULATION_TIME_STEP 0.1f
 #define SIMULATION_GRAVITY 9.8f
+#define EXPLOSION_TIME_STEP 0.05f
+#define EXPLOSION_DURATION 1.0f
+#define BUILDING_EXPLOSION_RADIUS 5
+#define GORILLA_EXPLOSION_RADIUS 30
 #define PI_F 3.14159265358979323846f
 
 #define GORILLA_CENTER_X(x) ((x) + GORILLA_BODY_WIDTH / 2)
@@ -46,9 +52,10 @@
 #define GORILLA_RIGHT_OVERHANG (GORILLA_ARM_WIDTH - 3)
 
 typedef enum {
-    GS_SIMULATE_BANANA,
     GS_READ_ANGLE,
     GS_READ_VELOCITY,
+    GS_SIMULATE_BANANA,
+    GS_EXPLODING,
     GS_GAMEOVER
 } GameState;
 
@@ -67,6 +74,14 @@ typedef struct {
     bool has_previous_pos;
     uint8_t drawn_rotation;
 } BananaState;
+
+typedef struct {
+    bool active;
+    float time;
+    int16_t pos[2];
+    bool hit_gorilla;
+    Player hit_player;
+} ExplosionState;
 
 typedef struct {
     uint32_t last_toss_tick;
@@ -128,6 +143,7 @@ const std::bitset<35> sun_mouth_open_bits(
 static PlayerState player_one;
 static PlayerState player_two;
 static BananaState banana;
+static ExplosionState explosion;
 static AnimationState animations;
 static RoundState game;
 static ModeState mode;
@@ -136,6 +152,15 @@ static void reset_simulation() {
     banana.time = 0;
     banana.last_tick = 0;
     banana.has_previous_pos = false;
+}
+
+static void reset_explosion() {
+    explosion.active = false;
+    explosion.time = 0;
+    explosion.pos[0] = 0;
+    explosion.pos[1] = 0;
+    explosion.hit_gorilla = false;
+    explosion.hit_player = PLAYER_ONE;
 }
 
 static void reset_game() {
@@ -152,6 +177,7 @@ static void reset_game() {
     animations.last_toss_tick = 0;
     animations.last_win_tick = 0;
     animations.last_sun_mouth_tick = 0;
+    reset_explosion();
     reset_simulation();
 }
 
@@ -161,6 +187,18 @@ static void switch_player() {
     } else {
         game.current_player = PLAYER_ONE;
     }
+}
+
+static PlayerState* get_player_state(Player player) {
+    return player == PLAYER_ONE ? &player_one : &player_two;
+}
+
+static Player get_opponent(Player player) {
+    return player == PLAYER_ONE ? PLAYER_TWO : PLAYER_ONE;
+}
+
+static Player player_from_hit_x(int16_t x) {
+    return x > screen_width / 2 ? PLAYER_TWO : PLAYER_ONE;
 }
 
 static int16_t calculate_banana_y_position(uint16_t start_y) {
@@ -239,14 +277,13 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
 
 static uint8_t generate_house_color() {
     static const uint8_t house_colors[] = {
-        RGB332(2, 3, 1), RGB332(3, 3, 2), RGB332(3, 4, 1),
-        RGB332(4, 3, 2), RGB332(4, 5, 1), RGB332(5, 4, 2),
-        RGB332(5, 6, 1), RGB332(6, 5, 2), RGB332(6, 7, 1),
-        RGB332(7, 6, 0), RGB332(7, 7, 0),
+        RGB332(2, 3, 1), RGB332(3, 3, 2), RGB332(3, 4, 1), RGB332(4, 3, 2),
+        RGB332(4, 5, 1), RGB332(5, 4, 2), RGB332(5, 6, 1), RGB332(6, 5, 2),
+        RGB332(6, 7, 1), RGB332(7, 6, 0), RGB332(7, 7, 0),
     };
 
-    return house_colors[random(0, sizeof(house_colors) /
-                                      sizeof(house_colors[0]))];
+    return house_colors[random(0,
+                               sizeof(house_colors) / sizeof(house_colors[0]))];
 }
 
 static uint16_t calculate_gorilla_y_position(uint16_t x) {
@@ -453,35 +490,82 @@ static void draw_banana(int16_t x, int16_t y) {
     banana.drawn_rotation = rotation;
 }
 
-static void do_banana_explosion(int16_t x, int16_t y) {
+static bool is_gorilla_hit(int16_t x, int16_t y) {
     uint8_t** framebuffer = video_framebuffer_lines();
-    if (framebuffer == NULL) return;
+    if (framebuffer == NULL) return false;
 
-    // If gorilla hit
-    if (framebuffer[y][x] == GORILLA_COLOR) {
-        // Decide whether right or left gorilla (player 1 or player 2)
-        if (x > screen_width / 2) {
-            video_out.fillCircle(GORILLA_CENTER_X(player_two.pos[0]),
-                                 GORILLA_CENTER_Y(player_two.pos[1]), 25,
-                                 SKY_COLOR);
-            player_two.alive = false;
-            player_one.arms[0] = true;
-            player_one.arms[1] = false;
-        } else {
-            video_out.fillCircle(GORILLA_CENTER_X(player_one.pos[0]),
-                                 GORILLA_CENTER_Y(player_one.pos[1]), 25,
-                                 SKY_COLOR);
-            player_one.alive = false;
-            player_two.arms[0] = true;
-            player_two.arms[1] = false;
-        }
+    return x >= 0 && x < screen_width && y >= 0 && y < screen_height &&
+           framebuffer[y][x] == GORILLA_COLOR;
+}
 
+static void set_winner_pose(Player winner) {
+    // Reset toss tick to prevent arm resetting overwriting pose
+    animations.last_toss_tick = 0;
+    PlayerState* winner_state = get_player_state(winner);
+    winner_state->arms[0] = true;
+    winner_state->arms[1] = false;
+}
+
+static void start_explosion(int16_t x, int16_t y) {
+    explosion.active = true;
+    explosion.time = 0;
+    explosion.hit_gorilla = is_gorilla_hit(x, y);
+    explosion.hit_player = player_from_hit_x(x);
+    game.state = GS_EXPLODING;
+
+    if (explosion.hit_gorilla) {
+        PlayerState* hit_player_state = get_player_state(explosion.hit_player);
+        hit_player_state->alive = false;
+        set_winner_pose(get_opponent(explosion.hit_player));
+
+        explosion.pos[0] = GORILLA_CENTER_X(hit_player_state->pos[0]);
+        explosion.pos[1] = GORILLA_CENTER_Y(hit_player_state->pos[1]);
+    } else {
+        explosion.pos[0] = x;
+        explosion.pos[1] = y;
+    }
+}
+
+static void draw_explosion_frame(uint8_t final_radius) {
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1], final_radius,
+                         SKY_COLOR);
+
+    int16_t radius = (int16_t)(final_radius * (1.0 - explosion.time));
+    uint16_t color = explosion.time < 0.1 ? SKY_COLOR : EXPLOSION_COLOR;
+
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1], radius, color);
+}
+
+static void finish_explosion() {
+    // Overtwrite animation residual artifact
+    video_out.fillCircle(explosion.pos[0], explosion.pos[1],
+                         BUILDING_EXPLOSION_RADIUS, SKY_COLOR);
+
+    bool hit_gorilla = explosion.hit_gorilla;
+
+    reset_explosion();
+    reset_simulation();
+
+    if (hit_gorilla) {
         game.state = GS_GAMEOVER;
     } else {
-        video_out.fillCircle(x, y, 5, SKY_COLOR);
         game.state = GS_READ_ANGLE;
-        reset_simulation();
         switch_player();
+    }
+}
+
+static void update_explosion() {
+    if (!explosion.active) return;
+
+    if (explosion.hit_gorilla) {
+        draw_explosion_frame(GORILLA_EXPLOSION_RADIUS);
+    } else {
+        draw_explosion_frame(BUILDING_EXPLOSION_RADIUS);
+    }
+
+    explosion.time += EXPLOSION_TIME_STEP;
+    if (explosion.time >= EXPLOSION_DURATION) {
+        finish_explosion();
     }
 }
 
@@ -500,7 +584,7 @@ static void simulate_banana() {
 
     if (millis() - banana.last_tick > SIMULATION_TICK_SPEED) {
         banana.last_tick = millis();
-        banana.time += 0.1f;
+        banana.time += SIMULATION_TIME_STEP;
     }
 
     int16_t x = calculate_banana_x_position(start_x);
@@ -524,7 +608,7 @@ static void simulate_banana() {
 
     if (find_banana_collision(collision_start_x, collision_start_y, x, y,
                               &impact_x, &impact_y, &hit_sun)) {
-        do_banana_explosion(impact_x, impact_y);
+        start_explosion(impact_x, impact_y);
         return;
     }
 
@@ -631,10 +715,14 @@ void gorillas_render() {
                      player_two.arms[0], player_two.arms[1]);
     }
 
+    if (explosion.active) update_explosion();
+
     video_out.setCursor(0, TEXT_Y_START);
-    draw_read_angle();
-    draw_read_velocity();
-    simulate_banana();
+    if (game.state != GS_EXPLODING) {
+        draw_read_angle();
+        draw_read_velocity();
+        simulate_banana();
+    }
     draw_wind();
     draw_sun();
 }
