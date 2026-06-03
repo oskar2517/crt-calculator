@@ -6,10 +6,13 @@
 #define OFFSET_X(x) ((x) + 15)
 #define OFFSET_Y(y) ((y) + 40)
 
+#define FRAMES_COUNT 5259
+
 static File file;
 static uint8_t buffer[5096];
 static uint32_t buffer_len;
 static uint32_t last_frame_read;
+static uint16_t frame_counter;
 
 static void read_frame_into_buffer() {
     uint32_t len = 0;
@@ -20,15 +23,18 @@ static void read_frame_into_buffer() {
 
     buffer_len = n;
 
-    /* if (buffer_len == 0) {
+    frame_counter++;
+    if (frame_counter > FRAMES_COUNT) {
+        frame_counter = 0;
         file.seek(0);
         read_frame_into_buffer();
-    } */
+    }
 }
 
 void bad_apple_enter() {
     file = LittleFS.open("/bad_apple.bin", "r");
     last_frame_read = 0;
+    frame_counter = 0;
 }
 
 void bad_apple_exit() {
