@@ -20,7 +20,7 @@
 #define SUN_MOUTH_OPEN_HEIGHT 5
 
 #define RGB332(red, green, blue) \
-    ((((red)&0x07) << 5) | (((green)&0x07) << 2) | ((blue)&0x03))
+    ((((red) & 0x07) << 5) | (((green) & 0x07) << 2) | ((blue) & 0x03))
 
 #define GORILLA_COLOR 255
 #define BANANA_COLOR 253
@@ -49,7 +49,8 @@ typedef enum {
     GS_SIMULATE_BANANA,
     GS_READ_ANGLE,
     GS_READ_VELOCITY,
-    GS_GAMEOVER
+    GS_GAMEOVER,
+    GS_PAUSED
 } GameState;
 
 typedef enum { PLAYER_ONE, PLAYER_TWO } Player;
@@ -66,6 +67,9 @@ typedef struct {
     int16_t previous_pos[2];
     bool has_previous_pos;
     uint8_t drawn_rotation;
+    int16_t impact[2];
+    bool has_impact_pos;
+    bool hit_gorilla;
 } BananaState;
 
 typedef struct {
@@ -152,6 +156,8 @@ static void reset_game() {
     animations.last_toss_tick = 0;
     animations.last_win_tick = 0;
     animations.last_sun_mouth_tick = 0;
+    banana.has_impact_pos = false;
+    banana.hit_gorilla = false;
     reset_simulation();
 }
 
@@ -239,14 +245,13 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
 
 static uint8_t generate_house_color() {
     static const uint8_t house_colors[] = {
-        RGB332(2, 3, 1), RGB332(3, 3, 2), RGB332(3, 4, 1),
-        RGB332(4, 3, 2), RGB332(4, 5, 1), RGB332(5, 4, 2),
-        RGB332(5, 6, 1), RGB332(6, 5, 2), RGB332(6, 7, 1),
-        RGB332(7, 6, 0), RGB332(7, 7, 0),
+        RGB332(2, 3, 1), RGB332(3, 3, 2), RGB332(3, 4, 1), RGB332(4, 3, 2),
+        RGB332(4, 5, 1), RGB332(5, 4, 2), RGB332(5, 6, 1), RGB332(6, 5, 2),
+        RGB332(6, 7, 1), RGB332(7, 6, 0), RGB332(7, 7, 0),
     };
 
-    return house_colors[random(0, sizeof(house_colors) /
-                                      sizeof(house_colors[0]))];
+    return house_colors[random(0,
+                               sizeof(house_colors) / sizeof(house_colors[0]))];
 }
 
 static uint16_t calculate_gorilla_y_position(uint16_t x) {
@@ -458,31 +463,41 @@ static void do_banana_explosion(int16_t x, int16_t y) {
     if (framebuffer == NULL) return;
 
     // If gorilla hit
-    if (framebuffer[y][x] == GORILLA_COLOR) {
+    if (framebuffer[y][x] == GORILLA_COLOR || banana.hit_gorilla) {
+        banana.hit_gorilla = true;
         // Decide whether right or left gorilla (player 1 or player 2)
         if (x > screen_width / 2) {
             video_out.fillCircle(GORILLA_CENTER_X(player_two.pos[0]),
-                                 GORILLA_CENTER_Y(player_two.pos[1]), 25,
-                                 SKY_COLOR);
+                                 GORILLA_CENTER_Y(player_two.pos[1]),
+                                 ((int16_t)25 * banana.time), SKY_COLOR);
             player_two.alive = false;
             player_one.arms[0] = true;
             player_one.arms[1] = false;
         } else {
             video_out.fillCircle(GORILLA_CENTER_X(player_one.pos[0]),
-                                 GORILLA_CENTER_Y(player_one.pos[1]), 25,
-                                 SKY_COLOR);
+                                 GORILLA_CENTER_Y(player_one.pos[1]),
+                                 ((int16_t)25 * banana.time), SKY_COLOR);
             player_one.alive = false;
             player_two.arms[0] = true;
             player_two.arms[1] = false;
         }
 
-        game.state = GS_GAMEOVER;
+        if (banana.time >= 1.0) {
+            game.state = GS_GAMEOVER;
+            banana.has_impact_pos = false;
+        }
     } else {
-        video_out.fillCircle(x, y, 5, SKY_COLOR);
-        game.state = GS_READ_ANGLE;
-        reset_simulation();
-        switch_player();
+        video_out.fillCircle(x, y, ((int16_t)5 * banana.time), SKY_COLOR);
+
+        if (banana.time >= 1.0) {
+            game.state = GS_READ_ANGLE;
+            banana.has_impact_pos = false;
+            reset_simulation();
+            switch_player();
+        }
     }
+
+    banana.time += 0.1;
 }
 
 static void simulate_banana() {
@@ -522,9 +537,12 @@ static void simulate_banana() {
     int16_t impact_x;
     int16_t impact_y;
 
+    // TODO: refactor out of conditional
     if (find_banana_collision(collision_start_x, collision_start_y, x, y,
-                              &impact_x, &impact_y, &hit_sun)) {
-        do_banana_explosion(impact_x, impact_y);
+                              &banana.impact[0], &banana.impact[1], &hit_sun)) {
+        banana.has_impact_pos = true;
+        game.state = GS_PAUSED;
+        banana.time = 0;
         return;
     }
 
@@ -631,10 +649,17 @@ void gorillas_render() {
                      player_two.arms[0], player_two.arms[1]);
     }
 
+    if (banana.has_impact_pos) {
+        do_banana_explosion(banana.impact[0], banana.impact[1]);
+        return;
+    }
+
     video_out.setCursor(0, TEXT_Y_START);
-    draw_read_angle();
-    draw_read_velocity();
-    simulate_banana();
+    if (game.state != GS_PAUSED) {
+        draw_read_angle();
+        draw_read_velocity();
+        simulate_banana();
+    }
     draw_wind();
     draw_sun();
 }
