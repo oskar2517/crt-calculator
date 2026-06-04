@@ -30,20 +30,19 @@ uint8_t neighbors(int16_t x, int16_t y) {
 void next_generation() {
     next_board.reset();
 
-    for (int16_t x = 0; x < BOARD_WIDTH; x++) {
-        for (int16_t y = 0; y < BOARD_HEIGHT; y++) {
-            uint16_t i = y * BOARD_WIDTH + x;
-            bool alive = board.test(i);
-            uint8_t n = neighbors(x, y);
+    for (uint16_t i = 0; i < BOARD_WIDTH * BOARD_HEIGHT; i++) {
+        int16_t x = i % BOARD_WIDTH;
+        int16_t y = i / BOARD_WIDTH;
+        bool alive = board.test(i);
+        uint8_t n = neighbors(x, y);
 
-            if ((alive && (n == 2 || n == 3)) || (!alive && n == 3)) {
-                next_board.set(i);
-            }
+        if ((alive && (n == 2 || n == 3)) || (!alive && n == 3)) {
+            next_board.set(i);
+        }
 
-            // Extra rule to prevent stabilization
-            if (n >= 1 && random(0, 1000) == 999) {
-                next_board.flip(i);
-            }
+        // Extra rule to prevent stabilization
+        if (n >= 1 && random(0, 1000) == 999) {
+            next_board.flip(i);
         }
     }
 
@@ -78,6 +77,10 @@ void gol_render() {
 
     video_out.waitForFrame();
     video_out.fillScreen(0);
+
+    if (board.none()) {
+        generate_random_board();
+    }
 
     draw_board();
 }
