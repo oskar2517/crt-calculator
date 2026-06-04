@@ -8,7 +8,7 @@
 static std::bitset<BOARD_WIDTH * BOARD_HEIGHT> board;
 static std::bitset<BOARD_WIDTH * BOARD_HEIGHT> next_board;
 
-uint8_t neighbors(int16_t x, int16_t y) {
+static uint8_t neighbors(int16_t x, int16_t y) {
     uint8_t n = 0;
 
     for (int8_t dx = -1; dx <= 1; dx++) {
@@ -27,7 +27,7 @@ uint8_t neighbors(int16_t x, int16_t y) {
     return n;
 }
 
-void next_generation() {
+static void next_generation() {
     next_board.reset();
 
     for (uint16_t i = 0; i < BOARD_WIDTH * BOARD_HEIGHT; i++) {
@@ -49,7 +49,7 @@ void next_generation() {
     board = next_board;
 }
 
-void draw_board() {
+static void draw_board() {
     for (uint16_t i = 0; i < BOARD_WIDTH * BOARD_HEIGHT; i++) {
         if (!board.test(i)) continue;
 
@@ -60,7 +60,7 @@ void draw_board() {
     }
 }
 
-void generate_random_board() {
+static void generate_random_board() {
     for (uint16_t i = 0; i < BOARD_WIDTH * BOARD_HEIGHT; i++) {
         if (random(0, 2) > 0) {
             board.set(i);
