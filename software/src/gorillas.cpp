@@ -2,7 +2,6 @@
 
 #include <bitset>
 #include <cmath>
-#include <random>
 
 #include "video.h"
 #include "video_framebuffer.h"
