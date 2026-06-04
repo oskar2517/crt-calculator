@@ -4,6 +4,7 @@
 #include <cmath>
 #include <random>
 
+#include "video.h"
 #include "video_framebuffer.h"
 
 #define GORILLA_BODY_WIDTH 19
@@ -53,6 +54,7 @@
 #define GORILLA_RIGHT_OVERHANG (GORILLA_ARM_WIDTH - 3)
 
 typedef enum {
+    GS_MENU,
     GS_READ_ANGLE,
     GS_READ_VELOCITY,
     GS_SIMULATE_BANANA,
@@ -269,7 +271,8 @@ static void draw_house(int16_t x, int16_t y, uint8_t width, uint8_t height,
     // Draw windows
     for (uint8_t xx = 3; xx <= width - 5; xx += 8) {
         for (uint8_t yy = 3; yy <= height - 11; yy += 15) {
-            uint8_t c = random(0, 3) >= 1 ? LIT_WINDOW_COLOR : UNLIT_WINDOW_COLOR;
+            uint8_t c =
+                random(0, 3) >= 1 ? LIT_WINDOW_COLOR : UNLIT_WINDOW_COLOR;
 
             video_out.fillRect(x + xx, y + yy, 4, 10, c);
         }
@@ -491,6 +494,70 @@ static void draw_banana(int16_t x, int16_t y) {
     banana.drawn_rotation = rotation;
 }
 
+static void draw_menu() {
+    static uint8_t h_offset = 0;
+    static uint8_t v_offset = 0;
+
+    video_out.setTextColor(0xFF);
+    video_out.setTextWrap(false);
+
+    // Upper lines
+    for (uint16_t i = h_offset + 20; i <= screen_width; i += 20) {
+        video_out.setCursor(screen_width - i, 20);
+        video_out.print("*");
+    }
+
+    // Lower line
+    for (uint16_t i = h_offset; i <= screen_width - 20; i += 20) {
+        video_out.setCursor(i, screen_height - 40);
+        video_out.print("*");
+    }
+
+    // Left line
+    for (uint16_t i = v_offset + 20; i <= screen_height - 40; i += 40) {
+        video_out.setCursor(0, i);
+        video_out.print("*");
+    }
+
+    // Right line
+    for (uint16_t i = v_offset + 40; i <= screen_height - 20; i += 40) {
+        video_out.setCursor(screen_width - 20, screen_height - i);
+        video_out.print("*");
+    }
+
+    h_offset += 2;  // 4
+    v_offset += 4;  // 8
+
+    if (h_offset >= 20) {
+        h_offset = 0;
+    }
+
+    if (v_offset >= 40) {
+        v_offset = 0;
+    }
+
+    video_out.setTextWrap(true);
+
+    draw_centered_text("C++ GORILLAS", screen_width / 2, 40);
+    draw_centered_text("Your mission is to hit your opponent", screen_width / 2,
+                       60);
+    draw_centered_text("with the exploding banana by varying", screen_width / 2,
+                       70);
+    draw_centered_text("the angle and power of your throw,", screen_width / 2,
+                       80);
+    draw_centered_text("taking into account wind speed,", screen_width / 2, 90);
+    draw_centered_text("gravity, and the city skyline.", screen_width / 2, 100);
+    draw_centered_text("The wind speed is shown by a", screen_width / 2, 110);
+    draw_centered_text("directional arrow in the top of the", screen_width / 2,
+                       120);
+    draw_centered_text("playing field, its length relative", screen_width / 2,
+                       130);
+    draw_centered_text("to its strength.", screen_width / 2, 140);
+
+    draw_centered_text("Press any key to continue", screen_width / 2,
+                       screen_height - 20);
+}
+
 static bool is_gorilla_hit(int16_t x, int16_t y) {
     uint8_t** framebuffer = video_framebuffer_lines();
     if (framebuffer == NULL) return false;
@@ -673,8 +740,7 @@ static void generate_level() {
 void gorillas_enter() {
     mode.previous_copy_after_swap = video_out.copyAfterSwap;
     video_out.copyAfterSwap = true;
-    reset_game();
-    generate_level();
+    game.state = GS_MENU;
 }
 
 void gorillas_exit() {
@@ -683,7 +749,15 @@ void gorillas_exit() {
 
 void gorillas_render() {
     video_out.waitForFrame();
+
     video_out.setTextSize(1);
+
+    if (game.state == GS_MENU) {
+        video_out.fillScreen(0);
+        draw_menu();
+        return;
+    }
+
     video_out.setTextColor(HUD_COLOR);
 
     clear_input_area();
@@ -730,7 +804,7 @@ void gorillas_render() {
 }
 
 void gorillas_handle_key(char read_key) {
-    if (game.state == GS_GAMEOVER) {
+    if (game.state == GS_GAMEOVER || game.state == GS_MENU) {
         reset_game();
         generate_level();
         return;
