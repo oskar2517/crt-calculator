@@ -16,7 +16,7 @@ My project differs from the original in a few aspects. Firstly, I wanted my calc
 
 I designed the PCB in EasyEDA. It contains all the components necessary including an ESP32 microcontroller, a charge controller, a 12V boost converter for the CRT and, of course, the keypad. I used a relatively old model of ESP32 because it still has a built-in DAC which I need for the composite video generation. All external components are attached using JST connectors.
 
-![Schematic](/assets//pcb.png)
+![Schematic](/assets/pcb.png)
 
 ![PCB](/assets/8.png)
 
